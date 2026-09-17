@@ -21,6 +21,9 @@ if menuActive {
 	exit;
 }
 
+//les morceaux en vol avancent quel que soit l'etat des parties
+if photo != noone photo.step()
+
 //partie finie : le bouton de retour devient cliquable
 if gamesFinished(){
 	if mouse_check_button_pressed(mb_left) && rectHovered(BACK_X, BACK_Y, BACK_W, BACK_H){

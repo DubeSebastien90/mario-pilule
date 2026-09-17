@@ -8,6 +8,12 @@
 #macro NB_INITIAL_VIRUS 12		//autant que de morceaux de photo a debloquer
 #macro MAX_SETUP_TRIES 100		//essais avant d'accepter un plateau de depart imparfait
 
+//vol d'un morceau de photo, du virus casse vers sa place sur le panneau
+#macro FLY_DURATION 45			//en frames
+#macro FLY_ARC 0.30				//hauteur de la courbe, en fraction de la distance
+#macro FLY_SPIN 35				//rotation max au milieu du vol, en degres
+#macro FLY_ALPHA_START 0.4		//meme opacite que la vignette sur le virus
+
 #macro EMPTY_TILE 0
 #macro BLUE_PILL 1
 #macro RED_PILL 2
@@ -110,6 +116,7 @@ function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
 	rows = _rows
 
 	revealed = array_create(cols*rows, false)
+	flying = []						//morceaux en cours de vol vers leur place
 
 	//taille d'un morceau, dans le sprite source et a l'ecran
 	srcW = sprite_get_width(spr_photo) / cols
@@ -120,6 +127,79 @@ function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
 	static reveal = function(_n){
 		if _n < 0 || _n >= array_length(revealed) exit;
 		revealed[_n] = true
+	}
+
+	//coin haut-gauche de la place d'un morceau sur le panneau
+	static pieceX = function(_n){ return px + (_n mod cols)*pieceW }
+	static pieceY = function(_n){ return py + (_n div cols)*pieceH }
+
+	//lance le morceau _n depuis la case qui le retenait, vers sa place
+	//_x/_y : coin haut-gauche de la case, _size : sa taille a l'ecran
+	static flyPiece = function(_n, _x, _y, _size){
+		if _n < 0 || _n >= cols*rows exit;
+
+		var _fromX = _x + _size/2
+		var _fromY = _y + _size/2
+		var _toX = pieceX(_n) + pieceW/2
+		var _toY = pieceY(_n) + pieceH/2
+
+		//point de controle de la courbe : au dessus du milieu du trajet
+		var _dist = point_distance(_fromX, _fromY, _toX, _toY)
+
+		array_push(flying, {
+			piece: _n,
+			fromX: _fromX,	fromY: _fromY,
+			toX: _toX,		toY: _toY,
+			ctrlX: (_fromX + _toX)/2,
+			ctrlY: (_fromY + _toY)/2 - _dist*FLY_ARC,
+			fromSize: _size,
+			spin: random_range(-FLY_SPIN, FLY_SPIN),
+			timer: FLY_DURATION
+		})
+	}
+
+	//avance tous les vols, et revele le morceau a l'arrivee
+	static step = function(){
+		for(var k = array_length(flying)-1; k >= 0; k--){
+			flying[k].timer -= 1
+			if flying[k].timer > 0 continue;
+
+			reveal(flying[k].piece)
+			array_delete(flying, k, 1)
+		}
+	}
+
+	static drawFlying = function(){
+		for(var k = 0; k < array_length(flying); k++){
+			var _f = flying[k]
+
+			//0 au depart, 1 a l'arrivee, adouci aux deux bouts
+			var _t = 1 - _f.timer/FLY_DURATION
+			_t = _t*_t*(3 - 2*_t)
+
+			//courbe de Bezier quadratique : depart, point de controle, arrivee
+			var _u = 1 - _t
+			var _cx = _u*_u*_f.fromX + 2*_u*_t*_f.ctrlX + _t*_t*_f.toX
+			var _cy = _u*_u*_f.fromY + 2*_u*_t*_f.ctrlY + _t*_t*_f.toY
+
+			//la rotation part de 0 et y revient : le morceau se pose droit
+			var _rot = _f.spin * dsin(180*_t)
+
+			var _w = lerp(_f.fromSize, pieceW, _t)
+			var _h = lerp(_f.fromSize, pieceH, _t)
+			var _alpha = lerp(FLY_ALPHA_START, 1, _t)
+
+			//draw_sprite_general tourne autour de son ancre : on recule du centre
+			//vers le coin, dans le repere deja tourne
+			var _ax = _cx - (lengthdir_x(_w/2, _rot) + lengthdir_x(_h/2, _rot-90))
+			var _ay = _cy - (lengthdir_y(_w/2, _rot) + lengthdir_y(_h/2, _rot-90))
+
+			var _left = (_f.piece mod cols) * srcW
+			var _top = (_f.piece div cols) * srcH
+			draw_sprite_general(spr_photo, 0, _left, _top, srcW, srcH,
+				_ax, _ay, _w/srcW, _h/srcH, _rot,
+				c_white, c_white, c_white, c_white, _alpha)
+		}
 	}
 
 	//dessine le morceau _n dans un rectangle quelconque : le panneau l'utilise
@@ -156,8 +236,11 @@ function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
 
 		for(var n = 0; n < array_length(revealed); n++){
 			if !revealed[n] continue;
-			drawPiece(n, px + (n mod cols)*pieceW, py + (n div cols)*pieceH, pieceW, pieceH, 1)
+			drawPiece(n, pieceX(n), pieceY(n), pieceW, pieceH, 1)
 		}
+
+		//les morceaux en vol passent par dessus tout le reste
+		drawFlying()
 	}
 }
 
@@ -508,9 +591,9 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 			for(var j = 0; j < MAP_LENGTH; j++){
 				if !_marks[i][j] continue;
 
-				//un virus casse debloque son morceau de photo
+				//un virus casse envoie son morceau rejoindre sa place sur la photo
 				if board[i][j] > YELLOW_PILL && photo != noone {
-					photo.reveal(pieceFor(i, j))
+					photo.flyPiece(pieceFor(i, j), boardX + j*TILE_SIZE, boardY + i*TILE_SIZE, TILE_SIZE)
 				}
 
 				breakLink(i, j)
