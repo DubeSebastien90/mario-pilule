@@ -6,6 +6,7 @@ games = []
 
 //photo a reconstituer, a droite des plateaux
 photo = noone
+PHOTO_ZOOM = 1.3			//taille de la photo par rapport a un plateau
 
 BUTTON_W = 280
 BUTTON_H = 64
@@ -52,6 +53,11 @@ function startGame(_mode){
 	var _gap = 64
 	var _y0 = (room_height - _boardH) / 2
 
+	//la photo occupe son propre emplacement, plus grand qu'un plateau
+	var _photoW = _boardW * PHOTO_ZOOM
+	var _photoH = _boardH * PHOTO_ZOOM
+	var _photoY = (room_height - _photoH) / 2
+
 	var _arrows = { left: vk_left, right: vk_right, down: vk_down, rotate: vk_up }
 	var _wasd = { left: ord("A"), right: ord("D"), down: ord("S"), rotate: ord("W") }
 
@@ -59,15 +65,15 @@ function startGame(_mode){
 
 	if _mode == MODE_SOLO {
 		//deux colonnes : plateau puis photo, 12 morceaux pour 12 virus
-		var _x0 = (room_width - (_boardW*2 + _gap)) / 2
+		var _x0 = (room_width - (_boardW + _gap + _photoW)) / 2
 		games = [ new DrMarioGame(_x0, _y0, _arrows) ]
 
-		setupPhoto(_x0 + _boardW + _gap, _y0, _boardW, _boardH, 2, 6)
+		setupPhoto(_x0 + _boardW + _gap, _photoY, _photoW, _photoH, 2, 6)
 		games[0].photo = photo
 		games[0].pieceIds = photo.shuffledIds()
 	} else {
-		//trois colonnes de meme largeur : plateau, plateau, photo
-		var _x0 = (room_width - (_boardW*3 + _gap*2)) / 2
+		//trois colonnes : deux plateaux, puis la photo plus large
+		var _x0 = (room_width - (_boardW*2 + _gap*2 + _photoW)) / 2
 		games = [
 			new DrMarioGame(_x0, _y0, _wasd),
 			new DrMarioGame(_x0 + _boardW + _gap, _y0, _arrows)
@@ -81,7 +87,7 @@ function startGame(_mode){
 		if _mode == MODE_DUO_TEST games[0].autoFall = false
 
 		//une seule photo pour les deux : 24 morceaux, 12 chacun, tires au hasard
-		setupPhoto(_x0 + (_boardW + _gap)*2, _y0, _boardW, _boardH, 4, 6)
+		setupPhoto(_x0 + (_boardW + _gap)*2, _photoY, _photoW, _photoH, 4, 6)
 		games[0].photo = photo
 		games[1].photo = photo
 
