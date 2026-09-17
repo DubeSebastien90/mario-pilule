@@ -17,5 +17,13 @@ for(var i = 0; i < MAP_HEIGHT; i++){
 		if _tile != 0{
 			draw_sprite(spr_square,_tile,boardXOffset + j*TILE_SIZE,boardYOffset + i*TILE_SIZE)
 		}
+		if playingPillA != noone && playingPillB != noone{
+			if i == playingPillA.i && j == playingPillA.j{
+				draw_sprite(spr_square,playingPillA.color,boardXOffset + j*TILE_SIZE,boardYOffset + i*TILE_SIZE)
+			}
+			if i == playingPillB.i && j == playingPillB.j{
+				draw_sprite(spr_square,playingPillB.color,boardXOffset + j*TILE_SIZE,boardYOffset + i*TILE_SIZE)
+			}
+		}
 	}
 }
