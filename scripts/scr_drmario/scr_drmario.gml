@@ -6,6 +6,7 @@
 #macro MAP_HEIGHT 16
 #macro MAP_LENGTH 8
 #macro NB_INITIAL_VIRUS 12		//autant que de morceaux de photo a debloquer
+#macro MAX_SETUP_TRIES 100		//essais avant d'accepter un plateau de depart imparfait
 
 #macro EMPTY_TILE 0
 #macro BLUE_PILL 1
@@ -51,6 +52,11 @@ function Pill(_i, _j, _c) constructor {
 	i = _i;
 	j = _j;
 	color = _c
+}
+
+//couleur d'une case : un virus compte comme la pilule de meme couleur
+function tileColor(_tile){
+	return (_tile > YELLOW_PILL) ? _tile - YELLOW_PILL : _tile
 }
 
 //lien qui pointe de (_fi,_fj) vers (_ti,_tj), deux cases forcement adjacentes
@@ -237,18 +243,72 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		return _pieces
 	}
 
-	static setupBoard = function(){
-		var _board = clearBoard()
-		for (var n = 0; n < NB_INITIAL_VIRUS; n++){
-			var _i = MAP_HEIGHT - irandom(5) - 1
-			var _j = irandom(MAP_LENGTH-1)
-			while _board[_i][_j] != EMPTY_TILE{
-				_i = MAP_HEIGHT - irandom(5) - 1
-				_j = irandom(MAP_LENGTH-1)
+	//true si ce plateau contient deja une suite de 4+ de meme couleur
+	static boardHasRun = function(_board){
+		//lignes
+		for(var i = 0; i < MAP_HEIGHT; i++){
+			var _run = 0
+			var _prev = EMPTY_TILE
+			for(var j = 0; j < MAP_LENGTH; j++){
+				var _c = tileColor(_board[i][j])
+				if _c == EMPTY_TILE {
+					_run = 0
+				} else if _c == _prev {
+					_run += 1
+				} else {
+					_run = 1
+				}
+				_prev = _c
+				if _run >= 4 return true;
 			}
-			_board[_i][_j] = BLUE_VIRUS + n%3
-			virusPiece[_i][_j] = n			//le n-ieme virus cache le n-ieme morceau
 		}
+
+		//colonnes
+		for(var j = 0; j < MAP_LENGTH; j++){
+			var _run = 0
+			var _prev = EMPTY_TILE
+			for(var i = 0; i < MAP_HEIGHT; i++){
+				var _c = tileColor(_board[i][j])
+				if _c == EMPTY_TILE {
+					_run = 0
+				} else if _c == _prev {
+					_run += 1
+				} else {
+					_run = 1
+				}
+				_prev = _c
+				if _run >= 4 return true;
+			}
+		}
+
+		return false
+	}
+
+	//tire un placement de virus, et recommence tant qu'il contient une suite de 4+
+	static setupBoard = function(){
+		var _board = noone
+
+		for(var _attempt = 0; _attempt < MAX_SETUP_TRIES; _attempt++){
+			//chaque essai repart de zero, sinon les morceaux du tirage precedent restent
+			virusPiece = clearVirusPiece()
+			_board = clearBoard()
+
+			for (var n = 0; n < NB_INITIAL_VIRUS; n++){
+				var _i = MAP_HEIGHT - irandom(5) - 1
+				var _j = irandom(MAP_LENGTH-1)
+				while _board[_i][_j] != EMPTY_TILE{
+					_i = MAP_HEIGHT - irandom(5) - 1
+					_j = irandom(MAP_LENGTH-1)
+				}
+				_board[_i][_j] = BLUE_VIRUS + n%3
+				virusPiece[_i][_j] = n			//le n-ieme virus cache le n-ieme morceau
+			}
+
+			if !boardHasRun(_board) break;
+		}
+
+		//au bout de MAX_SETUP_TRIES on garde le dernier tirage : les suites sauteront
+		//au premier posé, ce qui debloquerait des morceaux sans que le joueur ait joue
 		return _board
 	}
 
@@ -393,7 +453,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 			for(var j = 0; j < MAP_LENGTH; j++){
 				_marks[i][j] = false
 				var _t = board[i][j]
-				_colors[i][j] = (_t > YELLOW_PILL) ? _t - YELLOW_PILL : _t
+				_colors[i][j] = tileColor(_t)
 			}
 		}
 
@@ -757,8 +817,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 	// Init, une fois les méthodes déclarées
 	//---------------------------------------------------------
 
-	virusPiece = clearVirusPiece()
-	board = setupBoard()
+	board = setupBoard()			//remplit aussi virusPiece
 	links = clearLinks()
 	spawnPill()
 }
