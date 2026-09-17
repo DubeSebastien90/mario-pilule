@@ -1,8 +1,8 @@
-press_left = keyboard_check_pressed(vk_left)
-press_right = keyboard_check_pressed(vk_right)
-rotate_up =  keyboard_check_pressed(ord("X"))
-rotate_down = keyboard_check_pressed(ord("Z"))
-press_down =  keyboard_check(vk_down)
+var press_left = keyboard_check_pressed(vk_left)
+var press_right = keyboard_check_pressed(vk_right)
+var rotate_up = keyboard_check_pressed(vk_up)
+var rotate_down = false
+var press_down =  keyboard_check(vk_down)
 
 switch(state){
 
@@ -64,5 +64,10 @@ switch(state){
 	case STATE_SPAWN:
 		stateTimer -= 1
 		if stateTimer <= 0 spawnPill()
+		break
+
+	//états terminaux : plus rien ne tourne
+	case STATE_WIN:
+	case STATE_LOSE:
 		break
 }

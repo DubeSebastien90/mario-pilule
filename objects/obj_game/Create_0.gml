@@ -30,6 +30,8 @@ STATE_CONTROL = 0		//le joueur dirige la pilule
 STATE_CLEARING = 1		//les tuiles condamnées clignotent avant de disparaître
 STATE_FALLING = 2		//ce qui n'est plus soutenu descend d'une rangée par tic
 STATE_SPAWN = 3			//petit délai avant la pilule suivante
+STATE_WIN = 4			//plus aucun virus
+STATE_LOSE = 5			//la pilule ne peut plus apparaître
 
 state = STATE_SPAWN
 stateTimer = 0
@@ -121,6 +123,12 @@ function setupBoard(){
 }
 
 function spawnPill(){
+	//défaite : la zone d'apparition est bouchée
+	if !cellIsFree(0, (MAP_LENGTH/2)-1) || !cellIsFree(0, MAP_LENGTH/2) {
+		state = STATE_LOSE
+		exit;
+	}
+
 	playingPillA = new Pill(0,(MAP_LENGTH/2)-1,choose(1,2,3))
 	playingPillB = new Pill(0,MAP_LENGTH/2,choose(1,2,3))
 	tickCooldown = TICK_COOLDOWN
@@ -140,12 +148,26 @@ function dropPillOnBoard(){
 	startResolving()
 }
 
+//nombre de virus encore sur le plateau
+function countViruses(){
+	var _n = 0
+	for(var i = 0; i < MAP_HEIGHT; i++){
+		for(var j = 0; j < MAP_LENGTH; j++){
+			if board[i][j] > YELLOW_PILL _n += 1
+		}
+	}
+	return _n
+}
+
 //cherche des suites : clignotement si on en trouve, sinon pilule suivante
 function startResolving(){
 	marks = findWinningTiles()
 	if marks != noone {
 		state = STATE_CLEARING
 		stateTimer = CLEAR_COOLDOWN
+	} else if countViruses() == 0 {
+		//victoire seulement une fois le plateau stabilisé, après l'animation
+		state = STATE_WIN
 	} else {
 		state = STATE_SPAWN
 		stateTimer = NEW_PILL_COOLDOWN

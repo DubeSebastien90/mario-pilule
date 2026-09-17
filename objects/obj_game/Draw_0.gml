@@ -31,3 +31,15 @@ if playingPillA != noone && playingPillB != noone{
 	drawTile(playingPillA.color, _linkA, boardXOffset + playingPillA.j*TILE_SIZE, boardYOffset + playingPillA.i*TILE_SIZE)
 	drawTile(playingPillB.color, _linkB, boardXOffset + playingPillB.j*TILE_SIZE, boardYOffset + playingPillB.i*TILE_SIZE)
 }
+
+
+//message de fin, au dessus du plateau
+if state == STATE_WIN || state == STATE_LOSE{
+	var _text = (state == STATE_WIN) ? "YOU WIN" : "YOU LOSE"
+	draw_set_halign(fa_center)
+	draw_set_valign(fa_bottom)
+	draw_set_color(c_white)
+	draw_text_transformed(boardXOffset + (MAP_LENGTH*TILE_SIZE)/2, boardYOffset - 8, _text, 2, 2, 0)
+	draw_set_halign(fa_left)
+	draw_set_valign(fa_top)
+}
