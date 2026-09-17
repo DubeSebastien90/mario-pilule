@@ -29,8 +29,8 @@ for(var g = 0; g < array_length(games); g++){
 	games[g].draw()
 }
 
-if showPhoto{
-	draw_sprite_ext(spr_photo, 0, photoX, photoY, photoScale, photoScale, 0, c_white, 1)
+if photo != noone{
+	photo.draw()
 }
 
 

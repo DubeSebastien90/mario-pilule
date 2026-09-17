@@ -5,7 +5,7 @@
 #macro TILE_SIZE 32
 #macro MAP_HEIGHT 16
 #macro MAP_LENGTH 8
-#macro NB_INITIAL_VIRUS 9
+#macro NB_INITIAL_VIRUS 12		//autant que de morceaux de photo a debloquer
 
 #macro EMPTY_TILE 0
 #macro BLUE_PILL 1
@@ -88,6 +88,75 @@ function drawTile(_tile, _link, _x, _y){
 
 
 //=============================================================
+// La photo a reconstituer, decoupee en _cols x _rows morceaux.
+// Sa grille n'a aucun rapport avec celle du plateau : le lien passe
+// uniquement par le morceau attribue a chaque virus.
+// _x/_y/_w/_h : le rectangle ou la photo s'affiche, coin haut-gauche.
+//=============================================================
+
+function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
+
+	px = _x
+	py = _y
+	pw = _w
+	ph = _h
+	cols = _cols
+	rows = _rows
+
+	revealed = array_create(cols*rows, false)
+
+	//taille d'un morceau, dans le sprite source et a l'ecran
+	srcW = sprite_get_width(spr_photo) / cols
+	srcH = sprite_get_height(spr_photo) / rows
+	pieceW = pw / cols
+	pieceH = ph / rows
+
+	static reveal = function(_n){
+		if _n < 0 || _n >= array_length(revealed) exit;
+		revealed[_n] = true
+	}
+
+	//dessine le morceau _n dans un rectangle quelconque : le panneau l'utilise
+	//en grand et opaque, le plateau en vignette a 40%
+	static drawPiece = function(_n, _x, _y, _w, _h, _alpha){
+		if _n < 0 || _n >= cols*rows exit;
+
+		var _left = (_n mod cols) * srcW
+		var _top = (_n div cols) * srcH
+		draw_sprite_part_ext(spr_photo, 0, _left, _top, srcW, srcH,
+			_x, _y, _w/srcW, _h/srcH, c_white, _alpha)
+	}
+
+	//tous les index de morceaux, melanges : de quoi repartir la photo au hasard
+	static shuffledIds = function(){
+		var _ids = []
+		for(var n = 0; n < cols*rows; n++){
+			array_push(_ids, n)
+		}
+		for(var k = array_length(_ids)-1; k > 0; k--){
+			var _r = irandom(k)
+			var _tmp = _ids[k]
+			_ids[k] = _ids[_r]
+			_ids[_r] = _tmp
+		}
+		return _ids
+	}
+
+	static draw = function(){
+		//la forme de la photo, avant tout deblocage
+		draw_set_color(c_dkgray)
+		draw_rectangle(px, py, px + pw, py + ph, false)
+		draw_set_color(c_white)
+
+		for(var n = 0; n < array_length(revealed); n++){
+			if !revealed[n] continue;
+			drawPiece(n, px + (n mod cols)*pieceW, py + (n div cols)*pieceH, pieceW, pieceH, 1)
+		}
+	}
+}
+
+
+//=============================================================
 // Une partie complète : plateau, état, contrôles, affichage
 // _controls : { left, right, down, rotate }, des codes de touches
 //=============================================================
@@ -113,6 +182,10 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 
 	opponent = noone				//l'autre partie, pour se terminer ensemble
 	autoFall = true					//false : la pilule ne descend jamais toute seule
+
+	photo = noone					//panneau partage, noone si aucun
+	pieceIds = noone				//morceaux attribues a cette partie, dans l'ordre des virus
+	virusPiece = noone				//n-ieme virus occupant chaque case
 
 	garbageQueue = []				//couleurs recues, en attente de la prochaine chute
 	lastGroupColors = []			//couleurs des groupes du dernier effacement
@@ -144,6 +217,26 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		return _links
 	}
 
+	//morceau de photo cache par la case, -1 si elle ne porte pas de virus
+	static pieceFor = function(_i, _j){
+		var _n = virusPiece[_i][_j]
+		if _n < 0 return -1;
+		if pieceIds == noone return _n;
+		if _n >= array_length(pieceIds) return -1;
+		return pieceIds[_n]
+	}
+
+	//aucun morceau attribue tant qu'un virus n'occupe pas la case
+	static clearVirusPiece = function(){
+		var _pieces = noone
+		for(var i = 0; i < MAP_HEIGHT; i++){
+			for(var j = 0; j < MAP_LENGTH; j++){
+				_pieces[i][j] = -1
+			}
+		}
+		return _pieces
+	}
+
 	static setupBoard = function(){
 		var _board = clearBoard()
 		for (var n = 0; n < NB_INITIAL_VIRUS; n++){
@@ -154,6 +247,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 				_j = irandom(MAP_LENGTH-1)
 			}
 			_board[_i][_j] = BLUE_VIRUS + n%3
+			virusPiece[_i][_j] = n			//le n-ieme virus cache le n-ieme morceau
 		}
 		return _board
 	}
@@ -352,10 +446,15 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		if _marks == noone exit;
 		for(var i = 0; i < MAP_HEIGHT; i++){
 			for(var j = 0; j < MAP_LENGTH; j++){
-				if _marks[i][j] {
-					breakLink(i, j)
-					board[i][j] = EMPTY_TILE
+				if !_marks[i][j] continue;
+
+				//un virus casse debloque son morceau de photo
+				if board[i][j] > YELLOW_PILL && photo != noone {
+					photo.reveal(pieceFor(i, j))
 				}
+
+				breakLink(i, j)
+				board[i][j] = EMPTY_TILE
 			}
 		}
 	}
@@ -478,13 +577,15 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		return _placed > 0
 	}
 
-	//termine la partie et impose le resultat inverse a l'adversaire
+	//une victoire ne concerne que cette partie : l'adversaire continue sur son
+	//propre plateau, ne serait-ce que pour finir sa moitie de photo.
+	//une defaite en revanche coule l'equipe : la photo ne sera jamais complete
 	static setEnding = function(_state){
 		if state == STATE_WIN || state == STATE_LOSE exit;	//deja fini, coupe la recursion
 
 		state = _state
-		if opponent != noone {
-			opponent.setEnding((_state == STATE_WIN) ? STATE_LOSE : STATE_WIN)
+		if _state == STATE_LOSE && opponent != noone {
+			opponent.setEnding(STATE_LOSE)
 		}
 	}
 
@@ -622,6 +723,12 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 				if _tile == EMPTY_TILE continue;
 				if _blinking && marks[i][j] continue;
 				drawTile(_tile, links[i][j], boardX + j*TILE_SIZE, boardY + i*TILE_SIZE)
+
+				//apercu du morceau que ce virus garde prisonnier
+				if _tile > YELLOW_PILL && photo != noone {
+					photo.drawPiece(pieceFor(i, j),
+						boardX + j*TILE_SIZE, boardY + i*TILE_SIZE, TILE_SIZE, TILE_SIZE, 0.4)
+				}
 			}
 		}
 
@@ -650,6 +757,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 	// Init, une fois les méthodes déclarées
 	//---------------------------------------------------------
 
+	virusPiece = clearVirusPiece()
 	board = setupBoard()
 	links = clearLinks()
 	spawnPill()

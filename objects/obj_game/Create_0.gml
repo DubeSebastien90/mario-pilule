@@ -4,11 +4,8 @@ randomise()
 menuActive = true
 games = []
 
-//photo affichee a droite des plateaux, en duo seulement
-showPhoto = false
-photoX = 0
-photoY = 0
-photoScale = 1
+//photo a reconstituer, a droite des plateaux
+photo = noone
 
 BUTTON_W = 280
 BUTTON_H = 64
@@ -34,20 +31,18 @@ for(var b = 0; b < array_length(buttons); b++){
 	buttons[b].y = _y + b*(BUTTON_H + BUTTON_GAP)
 }
 
-//met la photo a l'echelle pour tenir dans un emplacement large comme un plateau
-//sans qu'aucun cote ne depasse, et la centre dedans
-function setupPhoto(_slotX, _slotY, _slotW, _slotH){
+//cree le panneau photo, mis a l'echelle pour tenir dans l'emplacement
+//sans qu'aucun cote ne depasse, et centre dedans
+function setupPhoto(_slotX, _slotY, _slotW, _slotH, _cols, _rows){
 	var _sw = sprite_get_width(spr_photo)
 	var _sh = sprite_get_height(spr_photo)
 
 	//le plus petit des deux rapports : aucun cote ne depasse, proportions gardees
-	photoScale = min(_slotW / _sw, _slotH / _sh)
+	var _scale = min(_slotW / _sw, _slotH / _sh)
+	var _w = _sw * _scale
+	var _h = _sh * _scale
 
-	//l'origine du sprite peut etre n'importe ou, on la compense
-	photoX = _slotX + (_slotW - _sw*photoScale)/2 + sprite_get_xoffset(spr_photo)*photoScale
-	photoY = _slotY + (_slotH - _sh*photoScale)/2 + sprite_get_yoffset(spr_photo)*photoScale
-
-	showPhoto = true
+	photo = new PhotoBoard(_slotX + (_slotW - _w)/2, _slotY + (_slotH - _h)/2, _w, _h, _cols, _rows)
 }
 
 //cree les parties du mode choisi et quitte le menu
@@ -60,10 +55,16 @@ function startGame(_mode){
 	var _arrows = { left: vk_left, right: vk_right, down: vk_down, rotate: vk_up }
 	var _wasd = { left: ord("A"), right: ord("D"), down: ord("S"), rotate: ord("W") }
 
-	showPhoto = false
+	photo = noone
 
 	if _mode == MODE_SOLO {
-		games = [ new DrMarioGame((room_width - _boardW)/2, _y0, _arrows) ]
+		//deux colonnes : plateau puis photo, 12 morceaux pour 12 virus
+		var _x0 = (room_width - (_boardW*2 + _gap)) / 2
+		games = [ new DrMarioGame(_x0, _y0, _arrows) ]
+
+		setupPhoto(_x0 + _boardW + _gap, _y0, _boardW, _boardH, 2, 6)
+		games[0].photo = photo
+		games[0].pieceIds = photo.shuffledIds()
 	} else {
 		//trois colonnes de meme largeur : plateau, plateau, photo
 		var _x0 = (room_width - (_boardW*3 + _gap*2)) / 2
@@ -79,7 +80,21 @@ function startGame(_mode){
 		//mode test : le plateau WASD ne descend jamais, il ne peut donc pas perdre
 		if _mode == MODE_DUO_TEST games[0].autoFall = false
 
-		setupPhoto(_x0 + (_boardW + _gap)*2, _y0, _boardW, _boardH)
+		//une seule photo pour les deux : 24 morceaux, 12 chacun, tires au hasard
+		setupPhoto(_x0 + (_boardW + _gap)*2, _y0, _boardW, _boardH, 4, 6)
+		games[0].photo = photo
+		games[1].photo = photo
+
+		//la liste melangee est coupee en deux : les deux moities sont donc disjointes
+		var _ids = photo.shuffledIds()
+		var _idsA = []
+		var _idsB = []
+		for(var n = 0; n < NB_INITIAL_VIRUS; n++){
+			array_push(_idsA, _ids[n])
+			array_push(_idsB, _ids[NB_INITIAL_VIRUS + n])
+		}
+		games[0].pieceIds = _idsA
+		games[1].pieceIds = _idsB
 	}
 
 	menuActive = false
