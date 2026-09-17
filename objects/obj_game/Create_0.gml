@@ -42,8 +42,8 @@ function startGame(_mode){
 	} else {
 		var _x0 = (room_width - (_boardW*2 + _gap)) / 2
 		games = [
-			new DrMarioGame(_x0, _y0, _arrows),
-			new DrMarioGame(_x0 + _boardW + _gap, _y0, _wasd)
+			new DrMarioGame(_x0, _y0, _wasd),
+			new DrMarioGame(_x0 + _boardW + _gap, _y0, _arrows)
 		]
 
 		//chaque partie connait l'autre : la fin de l'une termine l'autre

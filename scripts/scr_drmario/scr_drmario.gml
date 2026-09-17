@@ -35,7 +35,8 @@
 #macro MODE_DUO 1
 #macro MODE_DUO_TEST 2		//le 2e plateau ne descend jamais, pour tester la victoire
 
-#macro TICK_COOLDOWN 30		//descente de la pilule dirigée, et rythme des cascades
+#macro TICK_COOLDOWN 30			//descente de la pilule dirigée
+#macro GRAVITY_TICK_COOLDOWN 10	//chute des cascades, plus rapide que la pilule
 #macro CLEAR_COOLDOWN 30	//durée du clignotement
 #macro NEW_PILL_COOLDOWN 30
 #macro DOWN_COOLDOWN_FIRST 20
@@ -112,6 +113,10 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 
 	opponent = noone				//l'autre partie, pour se terminer ensemble
 	autoFall = true					//false : la pilule ne descend jamais toute seule
+
+	garbageQueue = []				//couleurs recues, en attente de la prochaine chute
+	lastGroupColors = []			//couleurs des groupes du dernier effacement
+	chainGroupColors = []			//idem, cumulees sur toute la resolution en cours
 
 
 	//---------------------------------------------------------
@@ -225,6 +230,9 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 
 		playingPillA = noone
 		playingPillB = noone
+
+		//nouvelle resolution : le combo repart de zero
+		chainGroupColors = []
 		startResolving()
 	}
 
@@ -295,6 +303,9 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 			}
 		}
 
+		//chaque suite fermee de 4+ est un groupe : c'est ce qui determine l'attaque
+		var _groups = []
+
 		//suites horizontales
 		for(var i = 0; i < MAP_HEIGHT; i++){
 			var _runStart = 0
@@ -302,6 +313,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 				var _same = (j < MAP_LENGTH) && (_colors[i][j] == _colors[i][_runStart]) && (_colors[i][j] != EMPTY_TILE)
 				if !_same {
 					if _colors[i][_runStart] != EMPTY_TILE && (j - _runStart) >= 4 {
+						array_push(_groups, _colors[i][_runStart])
 						for(var k = _runStart; k < j; k++){
 							_marks[i][k] = true
 						}
@@ -318,6 +330,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 				var _same = (i < MAP_HEIGHT) && (_colors[i][j] == _colors[_runStart][j]) && (_colors[i][j] != EMPTY_TILE)
 				if !_same {
 					if _colors[_runStart][j] != EMPTY_TILE && (i - _runStart) >= 4 {
+						array_push(_groups, _colors[_runStart][j])
 						for(var k = _runStart; k < i; k++){
 							_marks[k][j] = true
 						}
@@ -328,13 +341,8 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		}
 
 		//rien trouvé : on ne renvoie pas un tableau vide, plus simple à tester
-		var _found = false
-		for(var i = 0; i < MAP_HEIGHT && !_found; i++){
-			for(var j = 0; j < MAP_LENGTH && !_found; j++){
-				if _marks[i][j] _found = true
-			}
-		}
-		if !_found return noone;
+		lastGroupColors = _groups
+		if array_length(_groups) == 0 return noone;
 
 		return _marks
 	}
@@ -401,6 +409,75 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		return _moved
 	}
 
+	//---------------------------------------------------------
+	// Attaques
+	//---------------------------------------------------------
+
+	//nombre de moities envoyees pour un nombre de groupes elimines d'un coup
+	//un seul groupe n'attaque pas : il faut une croix ou une cascade
+	static garbageForGroups = function(_n){
+		if _n <= 1 return 0;
+		if _n == 2 return 2;
+		if _n == 3 return 4;
+		return 6;
+	}
+
+	//envoie a l'adversaire les moities dues pour toute la resolution ecoulee
+	static sendGarbage = function(){
+		var _src = chainGroupColors
+		var _n = array_length(_src)
+		chainGroupColors = []			//le combo est solde, quoi qu'il arrive
+		if _n == 0 exit;
+
+		var _count = garbageForGroups(_n)
+		if _count <= 0 exit;
+		if opponent == noone exit;
+
+		//les couleurs envoyees sont celles des groupes elimines, en boucle
+		var _colors = []
+		for(var k = 0; k < _count; k++){
+			array_push(_colors, _src[k % _n])
+		}
+		opponent.receiveGarbage(_colors)
+	}
+
+	//met l'attaque en file : elle n'apparait qu'a la prochaine phase de chute
+	static receiveGarbage = function(_colors){
+		for(var k = 0; k < array_length(_colors); k++){
+			array_push(garbageQueue, _colors[k])
+		}
+	}
+
+	//pose les moities en attente sur la rangee du haut, dans des colonnes libres
+	//retourne true si au moins une a ete posee
+	static spawnGarbage = function(){
+		if array_length(garbageQueue) == 0 return false;
+
+		//colonnes dont le haut est libre, melangees
+		var _cols = []
+		for(var j = 0; j < MAP_LENGTH; j++){
+			if board[0][j] == EMPTY_TILE array_push(_cols, j)
+		}
+		for(var k = array_length(_cols)-1; k > 0; k--){
+			var _r = irandom(k)
+			var _tmp = _cols[k]
+			_cols[k] = _cols[_r]
+			_cols[_r] = _tmp
+		}
+
+		//ce qui ne rentre pas reste en file pour la vague suivante
+		var _placed = 0
+		while _placed < array_length(_cols) && array_length(garbageQueue) > 0 {
+			var _color = garbageQueue[0]
+			array_delete(garbageQueue, 0, 1)
+			board[0][_cols[_placed]] = _color
+			links[0][_cols[_placed]] = LINK_NONE		//toujours des moities orphelines
+			_placed += 1
+		}
+
+		return _placed > 0
+	}
+
 	//termine la partie et impose le resultat inverse a l'adversaire
 	static setEnding = function(_state){
 		if state == STATE_WIN || state == STATE_LOSE exit;	//deja fini, coupe la recursion
@@ -413,17 +490,31 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 
 	//cherche des suites : clignotement si on en trouve, sinon pilule suivante
 	static startResolving = function(){
+		//une cascade en cours passe avant tout
 		marks = findWinningTiles()
 		if marks != noone {
 			state = STATE_CLEARING
 			stateTimer = CLEAR_COOLDOWN
-		} else if countViruses() == 0 {
-			//victoire seulement une fois le plateau stabilisé, après l'animation
-			setEnding(STATE_WIN)
-		} else {
-			state = STATE_SPAWN
-			stateTimer = NEW_PILL_COOLDOWN
+			exit;
 		}
+
+		//victoire seulement une fois le plateau stabilisé, après l'animation
+		if countViruses() == 0 {
+			setEnding(STATE_WIN)
+			exit;
+		}
+
+		//les attaques en attente tombent maintenant, jamais pendant STATE_CONTROL
+		if spawnGarbage() {
+			state = STATE_FALLING
+			stateTimer = GRAVITY_TICK_COOLDOWN
+			exit;
+		}
+
+		//la resolution est finie : le combo complet part d'un coup
+		sendGarbage()
+		state = STATE_SPAWN
+		stateTimer = NEW_PILL_COOLDOWN
 	}
 
 
@@ -478,9 +569,15 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 				stateTimer -= 1
 				if stateTimer <= 0 {
 					applyWinningTiles(marks)
+
+					//les groupes s'ajoutent au combo en cours : une cascade compte avec le reste
+					for(var k = 0; k < array_length(lastGroupColors); k++){
+						array_push(chainGroupColors, lastGroupColors[k])
+					}
+
 					marks = noone
 					state = STATE_FALLING
-					stateTimer = TICK_COOLDOWN
+					stateTimer = GRAVITY_TICK_COOLDOWN
 				}
 				break
 
@@ -488,7 +585,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 			case STATE_FALLING:
 				stateTimer -= 1
 				if stateTimer <= 0 {
-					stateTimer = TICK_COOLDOWN
+					stateTimer = GRAVITY_TICK_COOLDOWN
 					//plus rien ne tombe : on recherche des suites, d'où les cascades
 					if !applyGravityStep() startResolving()
 				}
