@@ -29,6 +29,10 @@ for(var g = 0; g < array_length(games); g++){
 	games[g].draw()
 }
 
+if showPhoto{
+	draw_sprite_ext(spr_photo, 0, photoX, photoY, photoScale, photoScale, 0, c_white, 1)
+}
+
 
 //bouton de retour au menu, une fois la partie finie
 if gamesFinished(){
@@ -36,6 +40,10 @@ if gamesFinished(){
 
 	draw_set_halign(fa_center)
 	draw_set_valign(fa_middle)
+
+	//fond plein : le bouton passe par dessus le plateau du centre
+	draw_set_color(c_black)
+	draw_rectangle(BACK_X, BACK_Y, BACK_X + BACK_W, BACK_Y + BACK_H, false)
 
 	draw_set_color(_hover ? c_white : c_gray)
 	draw_rectangle(BACK_X, BACK_Y, BACK_X + BACK_W, BACK_Y + BACK_H, true)
