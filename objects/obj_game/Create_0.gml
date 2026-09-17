@@ -25,11 +25,28 @@ LINK_DOWN = 4
 board = setupBoard()
 links = clearLinks()
 
-TICK_COOLDOWN = 30
+//phases de jeu
+STATE_CONTROL = 0		//le joueur dirige la pilule
+STATE_CLEARING = 1		//les tuiles condamnées clignotent avant de disparaître
+STATE_FALLING = 2		//ce qui n'est plus soutenu descend d'une rangée par tic
+STATE_SPAWN = 3			//petit délai avant la pilule suivante
+
+state = STATE_SPAWN
+stateTimer = 0
+
+TICK_COOLDOWN = 30		//descente de la pilule dirigée
 tickCooldown = TICK_COOLDOWN
 
+DOWN_COOLDOWN_FIRST = 20
+downCooldown = 0
+goingFast = false
+DOWN_COOLDOWN_FAST = 5
+
+CLEAR_COOLDOWN = 30		//durée du clignotement
 NEW_PILL_COOLDOWN = 30
-newPillCooldown = NEW_PILL_COOLDOWN
+
+//cases condamnées en attente d'effacement, noone hors de STATE_CLEARING
+marks = noone
 
 function Pill(_i, _j, _c) constructor {
     i = _i;
@@ -107,6 +124,7 @@ function spawnPill(){
 	playingPillA = new Pill(0,(MAP_LENGTH/2)-1,choose(1,2,3))
 	playingPillB = new Pill(0,MAP_LENGTH/2,choose(1,2,3))
 	tickCooldown = TICK_COOLDOWN
+	state = STATE_CONTROL
 }
 
 function dropPillOnBoard(){
@@ -119,7 +137,19 @@ function dropPillOnBoard(){
 
 	playingPillA = noone
 	playingPillB = noone
-	checkWinningTiles()
+	startResolving()
+}
+
+//cherche des suites : clignotement si on en trouve, sinon pilule suivante
+function startResolving(){
+	marks = findWinningTiles()
+	if marks != noone {
+		state = STATE_CLEARING
+		stateTimer = CLEAR_COOLDOWN
+	} else {
+		state = STATE_SPAWN
+		stateTimer = NEW_PILL_COOLDOWN
+	}
 }
 
 //true si la case est dans le plateau et libre
@@ -177,9 +207,9 @@ function movePlayingPill(_i, _j){
 	//sinon (blocage latéral) : on ignore l'input
 }
 
-//cherche les suites de 4+ tuiles de même couleur (lignes et colonnes) et les efface
-//retourne true si au moins une tuile a été effacée
-function checkWinningTiles(){
+//cherche les suites de 4+ tuiles de même couleur (lignes et colonnes)
+//retourne le tableau des cases condamnées, ou noone s'il n'y a rien
+function findWinningTiles(){
 	//tableau de marquage, pour effacer seulement après avoir tout scanné
 	var _marks = noone
 	//couleur de chaque case : un virus compte comme la pilule de même couleur
@@ -224,19 +254,86 @@ function checkWinningTiles(){
 		}
 	}
 
-	//effacement
-	var _cleared = false
+	//rien trouvé : on ne renvoie pas un tableau vide, plus simple à tester
+	var _found = false
+	for(var i = 0; i < MAP_HEIGHT && !_found; i++){
+		for(var j = 0; j < MAP_LENGTH && !_found; j++){
+			if _marks[i][j] _found = true
+		}
+	}
+	if !_found return noone;
+
+	return _marks
+}
+
+//efface les cases marquées, en cassant les liens des moitiés survivantes
+function applyWinningTiles(_marks){
+	if _marks == noone exit;
 	for(var i = 0; i < MAP_HEIGHT; i++){
 		for(var j = 0; j < MAP_LENGTH; j++){
 			if _marks[i][j] {
 				breakLink(i, j)
 				board[i][j] = EMPTY_TILE
-				_cleared = true
+			}
+		}
+	}
+}
+
+//deplace une tuile et son lien vers une case vide
+function moveTile(_fi, _fj, _ti, _tj){
+	board[_ti][_tj] = board[_fi][_fj]
+	links[_ti][_tj] = links[_fi][_fj]
+	board[_fi][_fj] = EMPTY_TILE
+	links[_fi][_fj] = LINK_NONE
+}
+
+//true si la case peut accueillir une tuile qui tombe
+function canFallInto(_i, _j){
+	if _i >= MAP_HEIGHT return false;
+	return board[_i][_j] == EMPTY_TILE;
+}
+
+//descend d'une rangée tout ce qui n'est plus soutenu
+//retourne true si au moins une unité a bougé
+function applyGravityStep(){
+	var _moved = false
+
+	//du bas vers le haut : une unité déjà descendue n'est pas revue dans la même passe
+	for(var i = MAP_HEIGHT - 1; i >= 0; i--){
+		for(var j = 0; j < MAP_LENGTH; j++){
+			var _tile = board[i][j]
+			if _tile == EMPTY_TILE continue;
+			if _tile > YELLOW_PILL continue;			//les virus ne tombent jamais
+
+			//une paire n'est traitée que depuis la moitié gauche ou la moitié du haut
+			var _link = links[i][j]
+			if _link == LINK_LEFT || _link == LINK_UP continue;
+
+			if _link == LINK_RIGHT {
+				//paire horizontale : il faut les deux cases du dessous
+				if canFallInto(i+1, j) && canFallInto(i+1, j+1) {
+					moveTile(i, j, i+1, j)
+					moveTile(i, j+1, i+1, j+1)
+					_moved = true
+				}
+			} else if _link == LINK_DOWN {
+				//paire verticale : seule la case sous la moitié du bas compte
+				if canFallInto(i+2, j) {
+					moveTile(i+1, j, i+2, j)
+					moveTile(i, j, i+1, j)
+					_moved = true
+				}
+			} else {
+				//moitié orpheline
+				if canFallInto(i+1, j) {
+					moveTile(i, j, i+1, j)
+					_moved = true
+				}
 			}
 		}
 	}
 
-	return _cleared
+	return _moved
 }
 
 //angle du sprite : la frame de base a son bord plat vers la droite
