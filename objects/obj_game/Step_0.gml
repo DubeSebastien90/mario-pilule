@@ -1,3 +1,8 @@
+//commandes
+if keyboard_check_pressed(vk_tab){
+	window_set_fullscreen(!window_get_fullscreen())
+}
+
 if menuActive {
 	var _click = mouse_check_button_pressed(mb_left)
 
