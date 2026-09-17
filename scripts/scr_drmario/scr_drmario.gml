@@ -30,6 +30,11 @@
 #macro STATE_WIN 4			//plus aucun virus
 #macro STATE_LOSE 5			//la pilule ne peut plus apparaître
 
+//modes de partie, choisis dans le menu
+#macro MODE_SOLO 0
+#macro MODE_DUO 1
+#macro MODE_DUO_TEST 2		//le 2e plateau ne descend jamais, pour tester la victoire
+
 #macro TICK_COOLDOWN 30		//descente de la pilule dirigée, et rythme des cascades
 #macro CLEAR_COOLDOWN 30	//durée du clignotement
 #macro NEW_PILL_COOLDOWN 30
@@ -106,6 +111,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 	playingPillB = noone
 
 	opponent = noone				//l'autre partie, pour se terminer ensemble
+	autoFall = true					//false : la pilule ne descend jamais toute seule
 
 
 	//---------------------------------------------------------
@@ -458,10 +464,12 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 				if press_rotate	rotatePlayingPill(true)
 
 				//descente automatique, peut poser la pilule et changer d'état
-				tickCooldown -= 1
-				if tickCooldown <= 0 {
-					tickCooldown = TICK_COOLDOWN
-					movePlayingPill(1,0)
+				if autoFall {
+					tickCooldown -= 1
+					if tickCooldown <= 0 {
+						tickCooldown = TICK_COOLDOWN
+						movePlayingPill(1,0)
+					}
 				}
 				break
 
