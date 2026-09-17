@@ -12,6 +12,15 @@ board = clearBoard()
 TICK_COOLDOWN = 60
 tickCooldown = TICK_COOLDOWN
 
+function Pill(_i, _j, _c) constructor {
+    i = _i;
+    j = _j;
+	color = _c
+}
+
+playingPillA = noone
+playingPillB = noone
+
 
 spawnPill()
 
@@ -26,20 +35,30 @@ function clearBoard(){
 }
 
 function spawnPill(){
-	board[0][MAP_LENGTH/2] = BLUE_PILL
-	board[0][MAP_LENGTH/2 - 1] = BLUE_PILL
+	playingPillA = new Pill(0,(MAP_LENGTH/2)-1,BLUE_PILL)
+	playingPillB = new Pill(0,MAP_LENGTH/2,BLUE_PILL)
+	board[playingPillA.i][playingPillA.j] = playingPillA.color 
+	board[playingPillB.i][playingPillB.j] = playingPillB.color 
 }
 
-function simulate(){
+function updateBoard(){
 	var _newBoard = clearBoard()
 	for(var i = 0; i < MAP_HEIGHT; i++){
 		for(var j = 0; j < MAP_LENGTH; j++){
-			var _tile = board[i][j]
-			if _tile = BLUE_PILL{
-				_newBoard[i][j] = EMPTY_TILE
-				_newBoard[i+1][j] = BLUE_PILL
+			if i == playingPillA.i && j == playingPillA.j{
+				_newBoard[i][j] = playingPillA.color
+			}
+			if i == playingPillB.i && j == playingPillB.j{
+				_newBoard[i][j] = playingPillB.color
 			}
 		}
 	}
 	board = _newBoard
+}
+
+function movePlayingPill(_i, _j){
+	playingPillA.i += _i
+	playingPillA.j += _j
+	playingPillB.i += _i
+	playingPillB.j += _j
 }
