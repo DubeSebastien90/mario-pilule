@@ -39,3 +39,6 @@ if gamesFinished(){
 for(var g = 0; g < array_length(games); g++){
 	games[g].step()
 }
+
+//le depart est commun : tout le monde attend le dernier
+startWhenAllReady()

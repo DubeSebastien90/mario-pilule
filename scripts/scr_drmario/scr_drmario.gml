@@ -36,13 +36,20 @@
 #macro STATE_SPAWN 3		//petit délai avant la pilule suivante
 #macro STATE_WIN 4			//plus aucun virus
 #macro STATE_LOSE 5			//la pilule ne peut plus apparaître
+#macro STATE_READY 6		//choix de la difficulte, avant le depart
 
 //modes de partie, choisis dans le menu
 #macro MODE_SOLO 0
 #macro MODE_DUO 1
 #macro MODE_DUO_TEST 2		//le 2e plateau ne descend jamais, pour tester la victoire
 
-#macro TICK_COOLDOWN 30			//descente de la pilule dirigée
+//difficulte : chaque niveau retire 2 frames au tick de la pilule
+#macro MIN_DIFFICULTY 1
+#macro MAX_DIFFICULTY 10
+#macro BASE_DIFFICULTY 3		//celle qui correspond a TICK_COOLDOWN tel quel
+#macro DIFFICULTY_STEP 2
+
+#macro TICK_COOLDOWN 30			//descente de la pilule dirigée a BASE_DIFFICULTY
 #macro GRAVITY_TICK_COOLDOWN 10	//chute des cascades, plus rapide que la pilule
 #macro CLEAR_COOLDOWN 30	//durée du clignotement
 #macro NEW_PILL_COOLDOWN 30
@@ -260,8 +267,12 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 	links = noone
 	marks = noone					//cases condamnées, noone hors de STATE_CLEARING
 
-	state = STATE_SPAWN
+	state = STATE_READY
 	stateTimer = 0
+
+	difficulty = BASE_DIFFICULTY
+	ready = false
+	tickMax = TICK_COOLDOWN			//recalcule au depart, selon la difficulte
 	tickCooldown = TICK_COOLDOWN
 	downCooldown = 0
 	goingFast = false
@@ -444,6 +455,23 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 	// Pilule dirigée
 	//---------------------------------------------------------
 
+	//tick de descente correspondant a la difficulte choisie
+	static tickForDifficulty = function(){
+		return TICK_COOLDOWN - (difficulty - BASE_DIFFICULTY)*DIFFICULTY_STEP
+	}
+
+	static changeDifficulty = function(_delta){
+		difficulty = clamp(difficulty + _delta, MIN_DIFFICULTY, MAX_DIFFICULTY)
+	}
+
+	//quitte l'ecran de preparation : la vitesse est figee, la premiere pilule tombe
+	static startPlaying = function(){
+		if state != STATE_READY exit;
+
+		tickMax = tickForDifficulty()
+		spawnPill()
+	}
+
 	static spawnPill = function(){
 		//défaite : la zone d'apparition est bouchée
 		if !cellIsFree(0, (MAP_LENGTH/2)-1) || !cellIsFree(0, MAP_LENGTH/2) {
@@ -453,7 +481,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 
 		playingPillA = new Pill(0,(MAP_LENGTH/2)-1,choose(1,2,3))
 		playingPillB = new Pill(0,MAP_LENGTH/2,choose(1,2,3))
-		tickCooldown = TICK_COOLDOWN
+		tickCooldown = tickMax
 		state = STATE_CONTROL
 	}
 
@@ -774,6 +802,13 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 
 		switch(state){
 
+			//choix de la difficulte, en attendant que tout le monde soit pret
+			case STATE_READY:
+				if press_left	changeDifficulty(-1)
+				if press_right	changeDifficulty(1)
+				if press_rotate	ready = !ready			//bascule tant que rien n'est parti
+				break
+
 			//le joueur dirige la pilule
 			case STATE_CONTROL:
 				if press_left	movePlayingPill(0,-1)
@@ -784,7 +819,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 					downCooldown -= 1
 					if downCooldown <= 0 || !goingFast{
 						movePlayingPill(1,0)
-						tickCooldown = TICK_COOLDOWN
+						tickCooldown = tickMax
 						if goingFast{
 							downCooldown = DOWN_COOLDOWN_FAST
 						} else {
@@ -802,7 +837,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 				if autoFall {
 					tickCooldown -= 1
 					if tickCooldown <= 0 {
-						tickCooldown = TICK_COOLDOWN
+						tickCooldown = tickMax
 						movePlayingPill(1,0)
 					}
 				}
@@ -883,6 +918,34 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 			drawTile(playingPillB.color, _linkB, boardX + playingPillB.j*TILE_SIZE, boardY + playingPillB.i*TILE_SIZE)
 		}
 
+		//ecran de preparation, par dessus le plateau deja genere
+		if state == STATE_READY{
+			draw_set_halign(fa_center)
+			draw_set_valign(fa_middle)
+
+			var _cx = boardX + (MAP_LENGTH*TILE_SIZE)/2
+			var _cy = boardY + (MAP_HEIGHT*TILE_SIZE)/2
+
+			//voile sombre pour que le texte reste lisible sur les virus
+			draw_set_alpha(0.7)
+			draw_set_color(c_black)
+			draw_rectangle(boardX, _cy - 96, boardX + MAP_LENGTH*TILE_SIZE, _cy + 96, false)
+			draw_set_alpha(1)
+
+			draw_set_color(c_white)
+			draw_text_transformed(_cx, _cy - 56, "DIFFICULTE", 1, 1, 0)
+			draw_text_transformed(_cx, _cy - 16, string(difficulty), 4, 4, 0)
+			draw_set_color(c_gray)
+			draw_text(_cx, _cy + 28, "gauche / droite")
+
+			draw_set_color(ready ? c_lime : c_gray)
+			draw_text_transformed(_cx, _cy + 68, ready ? "PRET" : "haut = pret", 2, 2, 0)
+
+			draw_set_halign(fa_left)
+			draw_set_valign(fa_top)
+			draw_set_color(c_white)
+		}
+
 		//message de fin, au dessus du plateau
 		if state == STATE_WIN || state == STATE_LOSE{
 			var _text = (state == STATE_WIN) ? "YOU WIN" : "YOU LOSE"
@@ -902,5 +965,4 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 
 	board = setupBoard()			//remplit aussi virusPiece
 	links = clearLinks()
-	spawnPill()
 }

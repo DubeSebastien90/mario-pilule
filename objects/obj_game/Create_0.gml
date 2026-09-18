@@ -116,6 +116,27 @@ function buttonHovered(_b){
 	return rectHovered(_b.x, _b.y, BUTTON_W, BUTTON_H)
 }
 
+//true si toutes les parties attendent encore le depart
+function gamesWaiting(){
+	if array_length(games) == 0 return false;
+	for(var g = 0; g < array_length(games); g++){
+		if games[g].state != STATE_READY return false;
+	}
+	return true
+}
+
+//lance toutes les parties d'un coup, quand chacun s'est declare pret
+function startWhenAllReady(){
+	if !gamesWaiting() exit;
+
+	for(var g = 0; g < array_length(games); g++){
+		if !games[g].ready exit;
+	}
+	for(var g = 0; g < array_length(games); g++){
+		games[g].startPlaying()
+	}
+}
+
 //true si toutes les parties en cours sont terminees
 function gamesFinished(){
 	for(var g = 0; g < array_length(games); g++){
