@@ -56,7 +56,7 @@ if gamesFinished(){
 	draw_rectangle(BACK_X, BACK_Y, BACK_X + BACK_W, BACK_Y + BACK_H, true)
 
 	draw_set_color(_hover ? BUTTON_TEXT_HL_COLOR : BUTTON_TEXT_COLOR)
-	draw_text(BACK_X + BACK_W/2, BACK_Y + BACK_H/2, "BACK TO MENU")
+	draw_text(BACK_X + BACK_W/2, BACK_Y + BACK_H/2, "RETOUR AU MENU")
 
 	draw_set_halign(fa_left)
 	draw_set_valign(fa_top)
