@@ -1,4 +1,17 @@
 //=============================================================
+// Couleurs. GML lit les litteraux hexa en BGR, donc on passe par
+// make_colour_rgb : les valeurs restent lisibles en #RRGGBB.
+//=============================================================
+
+#macro BG_COLOR make_colour_rgb(0, 101, 84)				//#006554 fond d'ecran
+#macro PANEL_COLOR make_colour_rgb(30, 64, 68)			//#1E4044 fond des boutons et de la photo
+#macro BUTTON_TEXT_COLOR c_white
+#macro BUTTON_TEXT_HL_COLOR make_colour_rgb(157, 230, 78)	//#9DE64E texte au survol
+#macro BUTTON_BORDER_COLOR c_ltgray
+#macro BUTTON_BORDER_HL_COLOR c_white
+
+
+//=============================================================
 // Constantes partagées par toutes les parties
 //=============================================================
 
@@ -126,8 +139,8 @@ function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
 	flying = []						//morceaux en cours de vol vers leur place
 
 	//taille d'un morceau, dans le sprite source et a l'ecran
-	srcW = sprite_get_width(spr_photo) / cols
-	srcH = sprite_get_height(spr_photo) / rows
+	srcW = sprite_get_width(spr_photo2) / cols
+	srcH = sprite_get_height(spr_photo2) / rows
 	pieceW = pw / cols
 	pieceH = ph / rows
 
@@ -203,7 +216,7 @@ function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
 
 			var _left = (_f.piece mod cols) * srcW
 			var _top = (_f.piece div cols) * srcH
-			draw_sprite_general(spr_photo, 0, _left, _top, srcW, srcH,
+			draw_sprite_general(spr_photo2, 0, _left, _top, srcW, srcH,
 				_ax, _ay, _w/srcW, _h/srcH, _rot,
 				c_white, c_white, c_white, c_white, _alpha)
 		}
@@ -216,7 +229,7 @@ function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
 
 		var _left = (_n mod cols) * srcW
 		var _top = (_n div cols) * srcH
-		draw_sprite_part_ext(spr_photo, 0, _left, _top, srcW, srcH,
+		draw_sprite_part_ext(spr_photo2, 0, _left, _top, srcW, srcH,
 			_x, _y, _w/srcW, _h/srcH, c_white, _alpha)
 	}
 
@@ -237,7 +250,7 @@ function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
 
 	static draw = function(){
 		//la forme de la photo, avant tout deblocage
-		draw_set_color(c_dkgray)
+		draw_set_color(PANEL_COLOR)
 		draw_rectangle(px, py, px + pw, py + ph, false)
 		draw_set_color(c_white)
 

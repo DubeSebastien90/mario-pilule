@@ -1,5 +1,9 @@
 randomise()
 
+//menu
+flo_angle = 0
+temps = 0
+
 //menu de depart : aucune partie tant qu'un mode n'est pas choisi
 menuActive = true
 games = []
@@ -12,7 +16,8 @@ BUTTON_W = 280
 BUTTON_H = 64
 BUTTON_GAP = 24
 
-//bouton de retour, au centre de l'ecran une fois la partie finie
+//bouton de retour, centre sur le plateau de droite une fois la partie finie
+//(le seul en solo, celui du milieu en duo). Recalcule dans startGame.
 BACK_W = 240
 BACK_H = 48
 BACK_X = (room_width - BACK_W)/2
@@ -35,8 +40,8 @@ for(var b = 0; b < array_length(buttons); b++){
 //cree le panneau photo, mis a l'echelle pour tenir dans l'emplacement
 //sans qu'aucun cote ne depasse, et centre dedans
 function setupPhoto(_slotX, _slotY, _slotW, _slotH, _cols, _rows){
-	var _sw = sprite_get_width(spr_photo)
-	var _sh = sprite_get_height(spr_photo)
+	var _sw = sprite_get_width(spr_photo2)
+	var _sh = sprite_get_height(spr_photo2)
 
 	//le plus petit des deux rapports : aucun cote ne depasse, proportions gardees
 	var _scale = min(_slotW / _sw, _slotH / _sh)
@@ -102,6 +107,12 @@ function startGame(_mode){
 		games[0].pieceIds = _idsA
 		games[1].pieceIds = _idsB
 	}
+
+	//le bouton de retour se centre sur le dernier plateau cree :
+	//le seul en solo, celui du milieu en duo
+	var _last = games[array_length(games)-1]
+	BACK_X = _last.boardX + (_boardW - BACK_W)/2
+	BACK_Y = _last.boardY + (_boardH - BACK_H)/2
 
 	menuActive = false
 }

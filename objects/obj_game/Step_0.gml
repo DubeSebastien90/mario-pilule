@@ -4,6 +4,9 @@ if keyboard_check_pressed(vk_tab){
 }
 
 if menuActive {
+	temps += 5
+	flo_angle = dsin(temps)*4
+	
 	var _click = mouse_check_button_pressed(mb_left)
 
 	for(var b = 0; b < array_length(buttons); b++){
