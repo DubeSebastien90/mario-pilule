@@ -41,6 +41,27 @@ if photo != noone{
 }
 
 
+//bouton pour quitter, au dessus de la photo, disponible pendant toute la partie
+if photo != noone {
+	var _qhover = rectHovered(QUIT_X, QUIT_Y, QUIT_W, QUIT_H)
+
+	draw_set_halign(fa_center)
+	draw_set_valign(fa_middle)
+
+	draw_set_color(PANEL_COLOR)
+	draw_rectangle(QUIT_X, QUIT_Y, QUIT_X + QUIT_W, QUIT_Y + QUIT_H, false)
+
+	draw_set_color(_qhover ? BUTTON_BORDER_HL_COLOR : BUTTON_BORDER_COLOR)
+	draw_rectangle(QUIT_X, QUIT_Y, QUIT_X + QUIT_W, QUIT_Y + QUIT_H, true)
+
+	draw_set_color(_qhover ? BUTTON_TEXT_HL_COLOR : BUTTON_TEXT_COLOR)
+	draw_text(QUIT_X + QUIT_W/2, QUIT_Y + QUIT_H/2, "MENU")
+
+	draw_set_halign(fa_left)
+	draw_set_valign(fa_top)
+	draw_set_color(c_white)
+}
+
 //bouton de retour au menu, une fois la partie finie
 if gamesFinished(){
 	var _hover = rectHovered(BACK_X, BACK_Y, BACK_W, BACK_H)

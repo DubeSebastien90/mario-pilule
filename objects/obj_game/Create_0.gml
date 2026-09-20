@@ -23,11 +23,19 @@ BACK_H = 48
 BACK_X = (room_width - BACK_W)/2
 BACK_Y = (room_height - BACK_H)/2
 
+//bouton pour quitter la partie a tout moment, pose au dessus de la photo,
+//aligne sur son bord droit. Recalcule dans startGame.
+QUIT_W = 140
+QUIT_H = 40
+QUIT_GAP = 12
+QUIT_X = room_width - QUIT_W
+QUIT_Y = 0
+
 //les boutons du menu, empiles et centres
 buttons = [
 	{ text: "SOLO",		mode: MODE_SOLO },
 	{ text: "DUO",		mode: MODE_DUO },
-	{ text: "DUO TEST",	mode: MODE_DUO_TEST },
+	//{ text: "DUO TEST",	mode: MODE_DUO_TEST },
 ]
 
 var _total = array_length(buttons)*BUTTON_H + (array_length(buttons)-1)*BUTTON_GAP
@@ -113,6 +121,10 @@ function startGame(_mode){
 	var _last = games[array_length(games)-1]
 	BACK_X = _last.boardX + (_boardW - BACK_W)/2
 	BACK_Y = _last.boardY + (_boardH - BACK_H)/2
+
+	//le bouton quitter se pose juste au dessus du coin haut droit de la photo
+	QUIT_X = photo.px + photo.pw - QUIT_W
+	QUIT_Y = photo.py - QUIT_GAP - QUIT_H
 
 	menuActive = false
 }

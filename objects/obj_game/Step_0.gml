@@ -27,6 +27,12 @@ if menuActive {
 //les morceaux en vol avancent quel que soit l'etat des parties
 if photo != noone photo.step()
 
+//le bouton quitter ramene au menu a tout moment
+if photo != noone && mouse_check_button_pressed(mb_left) && rectHovered(QUIT_X, QUIT_Y, QUIT_W, QUIT_H){
+	backToMenu()
+	exit;
+}
+
 //partie finie : le bouton de retour devient cliquable
 if gamesFinished(){
 	if mouse_check_button_pressed(mb_left) && rectHovered(BACK_X, BACK_Y, BACK_W, BACK_H){

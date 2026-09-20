@@ -530,35 +530,56 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		//sinon (blocage latéral) : on ignore l'input
 	}
 
+	//rotation a la Dr Mario : la pilule ne sort jamais de son carre de 2x2
+	//horizontale = (case d'ancrage, case a droite), verticale = (case d'ancrage, case au dessus)
+	//un tour complet = 4 etats : horizontale, verticale, horizontale couleurs inversees, verticale inversee
 	static rotatePlayingPill = function(_clockwise){
 		if playingPillA == noone || playingPillB == noone exit;
 
-		//offset actuel du pivot (A) vers B
-		var _di = playingPillB.i - playingPillA.i;
-		var _dj = playingPillB.j - playingPillA.j;
+		var _horizontal = (playingPillA.i == playingPillB.i);
 
-		//rotation du vecteur (i grandit vers le bas)
-		var _ni, _nj;
-		if _clockwise {
-			_ni =  _dj;  _nj = -_di;
+		//_p1 : moitie gauche (horizontale) ou moitie basse (verticale), _p2 : l'autre
+		var _p1, _p2;
+		var _aFirst = _horizontal ? (playingPillA.j < playingPillB.j) : (playingPillA.i > playingPillB.i);
+		if _aFirst {
+			_p1 = playingPillA;	_p2 = playingPillB;
 		} else {
-			_ni = -_dj;  _nj =  _di;
+			_p1 = playingPillB;	_p2 = playingPillA;
 		}
 
-		var _ai = playingPillA.i,	_aj = playingPillA.j;
-		var _bi = _ai + _ni,		_bj = _aj + _nj;
+		//ancre : le coin bas-gauche du carre, il ne bouge pas pendant la rotation
+		var _i = _p1.i, _j = _p1.j;
 
-		//wall kick : tel quel, puis décalé à gauche, puis à droite
-		var _kicks = [0, -1, 1];
+		//les deux cases visees, puis qui occupe laquelle
+		var _ci1, _cj1, _ci2, _cj2;
+		var _first, _second;
+		if _horizontal {
+			//on passe a la verticale : ancre en bas, case au dessus
+			_ci1 = _i;		_cj1 = _j;
+			_ci2 = _i - 1;	_cj2 = _j;
+			//horaire : la moitie gauche monte. antihoraire : elle reste en bas
+			_first  = _clockwise ? _p2 : _p1;
+			_second = _clockwise ? _p1 : _p2;
+		} else {
+			//on repasse a l'horizontale : ancre a gauche, case a droite
+			_ci1 = _i;		_cj1 = _j;
+			_ci2 = _i;		_cj2 = _j + 1;
+			//horaire : la moitie basse reste a gauche. antihoraire : la moitie haute y va
+			_first  = _clockwise ? _p1 : _p2;
+			_second = _clockwise ? _p2 : _p1;
+		}
+
+		//wall kick : tel quel, puis decale d'une case a gauche (mur ou pile a droite)
+		var _kicks = [0, -1];
 		for(var k = 0; k < array_length(_kicks); k++){
 			var _o = _kicks[k];
-			if cellIsFree(_ai, _aj + _o) && cellIsFree(_bi, _bj + _o){
-				playingPillA.i = _ai;	playingPillA.j = _aj + _o;
-				playingPillB.i = _bi;	playingPillB.j = _bj + _o;
+			if cellIsFree(_ci1, _cj1 + _o) && cellIsFree(_ci2, _cj2 + _o){
+				_first.i  = _ci1;	_first.j  = _cj1 + _o;
+				_second.i = _ci2;	_second.j = _cj2 + _o;
 				exit;
 			}
 		}
-		//aucune position valide -> rotation refusée
+		//aucune position valide -> rotation refusee
 	}
 
 
