@@ -19,8 +19,8 @@
   ],
   "name":"Room1",
   "parent":{
-    "name":"Blank Pixel Game",
-    "path":"Blank Pixel Game.yyp",
+    "name":"DrFlorencePilule",
+    "path":"DrFlorencePilule.yyp",
   },
   "parentRoom":null,
   "physicsSettings":{

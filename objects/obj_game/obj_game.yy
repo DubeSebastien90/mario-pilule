@@ -10,8 +10,8 @@
   "name":"obj_game",
   "overriddenProperties":[],
   "parent":{
-    "name":"Blank Pixel Game",
-    "path":"Blank Pixel Game.yyp",
+    "name":"DrFlorencePilule",
+    "path":"DrFlorencePilule.yyp",
   },
   "parentObjectId":null,
   "persistent":false,

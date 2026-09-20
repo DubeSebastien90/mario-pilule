@@ -1,6 +1,6 @@
 {
   "$GMProject":"v1",
-  "%Name":"Blank Pixel Game",
+  "%Name":"DrFlorencePilule",
   "AudioGroups":[
     {"$GMAudioGroup":"v1","%Name":"audiogroup_default","exportDir":"","name":"audiogroup_default","resourceType":"GMAudioGroup","resourceVersion":"2.0","targets":-1,},
   ],
@@ -19,7 +19,7 @@
   "MetaData":{
     "IDEVersion":"2024.14.4.222",
   },
-  "name":"Blank Pixel Game",
+  "name":"DrFlorencePilule",
   "resources":[
     {"id":{"name":"fnt_all","path":"fonts/fnt_all/fnt_all.yy",},},
     {"id":{"name":"obj_camera","path":"objects/obj_camera/obj_camera.yy",},},

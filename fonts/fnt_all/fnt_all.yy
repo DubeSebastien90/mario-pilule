@@ -119,8 +119,8 @@
   "maintainGms1Font":false,
   "name":"fnt_all",
   "parent":{
-    "name":"Blank Pixel Game",
-    "path":"Blank Pixel Game.yyp",
+    "name":"DrFlorencePilule",
+    "path":"DrFlorencePilule.yyp",
   },
   "pointRounding":0,
   "ranges":[

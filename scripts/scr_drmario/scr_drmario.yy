@@ -5,8 +5,8 @@
   "isDnD":false,
   "name":"scr_drmario",
   "parent":{
-    "name":"Blank Pixel Game",
-    "path":"Blank Pixel Game.yyp",
+    "name":"DrFlorencePilule",
+    "path":"DrFlorencePilule.yyp",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",

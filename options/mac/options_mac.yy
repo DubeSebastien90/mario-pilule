@@ -14,7 +14,7 @@
   "option_mac_copyright":"",
   "option_mac_disable_sandbox":false,
   "option_mac_display_cursor":true,
-  "option_mac_display_name":"Pixel Game",
+  "option_mac_display_name":"Dr Florence Pilule",
   "option_mac_enable_retina":false,
   "option_mac_enable_steam":false,
   "option_mac_icon_png":"${base_options_dir}/mac/icons/1024.png",
