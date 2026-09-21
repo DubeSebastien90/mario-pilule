@@ -160,11 +160,12 @@ function startWhenAllReady(){
 	}
 }
 
-//true si toutes les parties en cours sont terminees
+//true si toutes les parties en cours sont terminees, souffle retombe
 function gamesFinished(){
 	for(var g = 0; g < array_length(games); g++){
 		var _s = games[g].state
 		if _s != STATE_WIN && _s != STATE_LOSE return false;
+		if games[g].isBlasting() return false;		//l'explosion a le dernier mot
 	}
 	return true
 }

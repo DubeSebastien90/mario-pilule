@@ -40,6 +40,20 @@ if photo != noone{
 	photo.draw()
 }
 
+//flash de l'explosion : plein cadre, par dessus les plateaux et la photo
+var _flash = 0
+for(var g = 0; g < array_length(games); g++){
+	_flash = max(_flash, games[g].blastFlash())
+}
+if _flash > 0 {
+	draw_set_alpha(_flash)
+	draw_set_color(c_white)
+	//large debordement : la camera tremble, le flash ne doit jamais laisser de bord
+	draw_rectangle(-128, -128, room_width + 128, room_height + 128, false)
+	draw_set_alpha(1)
+	draw_set_color(c_white)
+}
+
 
 //bouton pour quitter, au dessus de la photo, disponible pendant toute la partie
 if photo != noone {

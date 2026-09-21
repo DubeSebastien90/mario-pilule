@@ -27,6 +27,21 @@
 #macro FLY_SPIN 35				//rotation max au milieu du vol, en degres
 #macro FLY_ALPHA_START 0.4		//meme opacite que la vignette sur le virus
 
+//explosion de defaite : le plateau du perdant est souffle vers la photo
+#macro BLAST_DURATION 100		//duree totale de l'effet, en frames
+#macro BLAST_FLASH 14			//flash blanc du premier instant
+#macro BLAST_SHAKE 30			//amplitude de la secousse de camera
+#macro BLAST_SHAKE_LEN 45		//duree de la secousse, en frames
+#macro BLAST_RINGS 5			//anneaux de choc, tires en rafale
+#macro BLAST_SPARKS 120			//debris projetes du centre
+#macro BLAST_SPARK_GRAVITY 0.35
+
+//vol d'une tuile soufflee, du plateau vers la photo qui l'avale
+#macro TILE_FLY_DURATION 50
+#macro TILE_FLY_ARC 0.35
+#macro TILE_FLY_SPIN 240
+#macro TILE_FLY_WAVE 3.0		//frames de retard par case d'eloignement du centre
+
 #macro EMPTY_TILE 0
 #macro BLUE_PILL 1
 #macro RED_PILL 2
@@ -104,8 +119,9 @@ function linkAngle(_link){
 	return 0;
 }
 
-//dessine une tuile, _x et _y étant le coin haut-gauche de la case
-function drawTile(_tile, _link, _x, _y){
+//dessine une tuile autour de (_cx,_cy), libre d'etre tournee, mise a l'echelle
+//et rendue transparente : c'est ce qui sert aux tuiles soufflees vers la photo
+function drawTileExt(_tile, _link, _cx, _cy, _scale, _spin, _alpha){
 	var _frame = _tile
 	var _angle = 0
 	if _tile > YELLOW_PILL {
@@ -115,7 +131,23 @@ function drawTile(_tile, _link, _x, _y){
 	} else {
 		_angle = linkAngle(_link)		//moitié liée, bord plat vers le partenaire
 	}
-	draw_sprite_ext(spr_square, _frame, _x + TILE_SIZE/2, _y + TILE_SIZE/2, 1, 1, _angle, c_white, 1)
+	draw_sprite_ext(spr_square, _frame, _cx, _cy, _scale, _scale, _angle + _spin, c_white, _alpha)
+}
+
+//dessine une tuile posee dans sa case, _x et _y étant le coin haut-gauche
+function drawTile(_tile, _link, _x, _y){
+	drawTileExt(_tile, _link, _x + TILE_SIZE/2, _y + TILE_SIZE/2, 1, 0, 1)
+}
+
+//secoue la camera, si la room en contient une
+function screenShake(_magnitude, _frames){
+	if !instance_exists(obj_camera) exit;
+	with(obj_camera){
+		//une secousse deja plus forte n'est jamais affaiblie par une nouvelle
+		shake_magnitude = max(shake_magnitude, _magnitude)
+		shake_remain = max(shake_remain, _magnitude)
+		shake_lenght = max(shake_lenght, _frames)
+	}
 }
 
 
@@ -137,6 +169,7 @@ function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
 
 	revealed = array_create(cols*rows, false)
 	flying = []						//morceaux en cours de vol vers leur place
+	flyingTiles = []				//tuiles soufflees d'un plateau, avalees par la photo
 
 	//taille d'un morceau, dans le sprite source et a l'ecran
 	srcW = sprite_get_width(spr_photo2) / cols
@@ -178,6 +211,40 @@ function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
 		})
 	}
 
+	//une tuile arrachee a un plateau. une simple moitie de pilule se dissout
+	//quelque part dans la photo ; un virus, lui, est bel et bien detruit, donc il
+	//rejoint sa place et libere son morceau comme n'importe quel virus casse.
+	//_delay : frames d'attente avant le depart, le temps que l'onde l'atteigne
+	static flyTile = function(_tile, _link, _x, _y, _size, _piece, _delay){
+		var _fromX = _x + _size/2
+		var _fromY = _y + _size/2
+
+		//un virus emporte un morceau : il vise sa case sur le panneau
+		var _reveals = (_piece >= 0)
+		var _toX, _toY;
+		if _reveals {
+			_toX = pieceX(_piece) + pieceW/2
+			_toY = pieceY(_piece) + pieceH/2
+		} else {
+			//point de chute disperse dans la photo : le flux s'evase au lieu d'un trait
+			_toX = px + pw/2 + random_range(-pw*0.32, pw*0.32)
+			_toY = py + ph/2 + random_range(-ph*0.32, ph*0.32)
+		}
+
+		var _dist = point_distance(_fromX, _fromY, _toX, _toY)
+
+		array_push(flyingTiles, {
+			tile: _tile,	link: _link,	piece: _piece,	reveals: _reveals,
+			fromX: _fromX,	fromY: _fromY,
+			toX: _toX,		toY: _toY,
+			ctrlX: (_fromX + _toX)/2 + random_range(-_dist*0.18, _dist*0.18),
+			ctrlY: (_fromY + _toY)/2 - _dist*TILE_FLY_ARC,
+			spin: random_range(-TILE_FLY_SPIN, TILE_FLY_SPIN),
+			delay: _delay,
+			timer: TILE_FLY_DURATION
+		})
+	}
+
 	//avance tous les vols, et revele le morceau a l'arrivee
 	static step = function(){
 		for(var k = array_length(flying)-1; k >= 0; k--){
@@ -186,6 +253,69 @@ function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
 
 			reveal(flying[k].piece)
 			array_delete(flying, k, 1)
+		}
+
+		//les tuiles soufflees : seules celles qui portaient un virus liberent un morceau
+		for(var k = array_length(flyingTiles)-1; k >= 0; k--){
+			if flyingTiles[k].delay > 0 {
+				flyingTiles[k].delay -= 1
+				continue;
+			}
+			flyingTiles[k].timer -= 1
+			if flyingTiles[k].timer > 0 continue;
+
+			if flyingTiles[k].reveals reveal(flyingTiles[k].piece)
+			array_delete(flyingTiles, k, 1)
+		}
+	}
+
+	//true tant qu'une tuile soufflee n'est pas arrivee
+	static tilesInFlight = function(){
+		return array_length(flyingTiles) > 0
+	}
+
+	//les tuiles soufflees : elles tremblent sur place, puis foncent vers la photo.
+	//un virus y depose son morceau, une moitie de pilule s'y dissout
+	static drawFlyingTiles = function(){
+		for(var k = 0; k < array_length(flyingTiles); k++){
+			var _f = flyingTiles[k]
+
+			//l'onde ne l'a pas encore atteinte : elle vibre a sa place
+			if _f.delay > 0 {
+				var _jx = random_range(-2, 2)
+				var _jy = random_range(-2, 2)
+				drawTileExt(_f.tile, _f.link, _f.fromX + _jx, _f.fromY + _jy, 1, random_range(-4, 4), 1)
+				if _f.piece >= 0 {
+					drawPiece(_f.piece, _f.fromX + _jx - TILE_SIZE/2, _f.fromY + _jy - TILE_SIZE/2,
+						TILE_SIZE, TILE_SIZE, 0.4)
+				}
+				continue;
+			}
+
+			//un virus prend la meme course adoucie que les morceaux ordinaires,
+			//une moitie de pilule garde le depart sec du souffle
+			var _t = 1 - _f.timer/TILE_FLY_DURATION
+			if _f.reveals _t = _t*_t*(3 - 2*_t)
+
+			var _u = 1 - _t
+			var _cx = _u*_u*_f.fromX + 2*_u*_t*_f.ctrlX + _t*_t*_f.toX
+			var _cy = _u*_u*_f.fromY + 2*_u*_t*_f.ctrlY + _t*_t*_f.toY
+
+			if _f.reveals {
+				//la coquille du virus se dissout, le morceau grandit jusqu'a sa place
+				var _w = lerp(TILE_SIZE, pieceW, _t)
+				var _h = lerp(TILE_SIZE, pieceH, _t)
+				drawPiece(_f.piece, _cx - _w/2, _cy - _h/2, _w, _h, lerp(FLY_ALPHA_START, 1, _t))
+
+				var _shell = 1 - min(1, _t/0.6)
+				if _shell > 0 {
+					drawTileExt(_f.tile, _f.link, _cx, _cy, _w/TILE_SIZE, _f.spin*_t, _shell)
+				}
+				continue;
+			}
+
+			//moitie de pilule : elle ne se resorbe qu'en fin de course, le vol reste lisible
+			drawTileExt(_f.tile, _f.link, _cx, _cy, lerp(1, 0.15, _t*_t), _f.spin*_t, 1 - _t*_t)
 		}
 	}
 
@@ -261,6 +391,7 @@ function PhotoBoard(_x, _y, _w, _h, _cols, _rows) constructor {
 
 		//les morceaux en vol passent par dessus tout le reste
 		drawFlying()
+		drawFlyingTiles()
 	}
 }
 
@@ -299,6 +430,12 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 	photo = noone					//panneau partage, noone si aucun
 	pieceIds = noone				//morceaux attribues a cette partie, dans l'ordre des virus
 	virusPiece = noone				//n-ieme virus occupant chaque case
+
+	//explosion de defaite, purement visuelle : la partie est deja finie
+	explosionTimer = 0				//frames restantes, 0 = pas d'explosion en cours
+	explosionAge = 0
+	rings = []						//anneaux de choc
+	sparks = []						//debris projetes
 
 	garbageQueue = []				//couleurs recues, en attente de la prochaine chute
 	lastGroupColors = []			//couleurs des groupes du dernier effacement
@@ -782,16 +919,181 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		return _placed > 0
 	}
 
-	//une victoire ne concerne que cette partie : l'adversaire continue sur son
-	//propre plateau, ne serait-ce que pour finir sa moitie de photo.
-	//une defaite en revanche coule l'equipe : la photo ne sera jamais complete
-	static setEnding = function(_state){
+	//en duo c'est un duel : celui qui nettoie son plateau le premier fait sauter
+	//celui de l'autre. une pile qui creve reste une defaite ordinaire, sans souffle,
+	//et elle coule l'equipe : la photo ne sera de toute facon jamais complete.
+	//_blast : seule une defaite infligee par la victoire de l'autre fait exploser
+	static setEnding = function(_state, _blast = false){
 		if state == STATE_WIN || state == STATE_LOSE exit;	//deja fini, coupe la recursion
 
 		state = _state
-		if _state == STATE_LOSE && opponent != noone {
-			opponent.setEnding(STATE_LOSE)
+		if _state == STATE_LOSE {
+			if _blast explode()
+			if opponent != noone opponent.setEnding(STATE_LOSE)
+		} else if opponent != noone {
+			//la victoire de l'un est la defaite de l'autre, et celle-la explose
+			opponent.setEnding(STATE_LOSE, true)
 		}
+	}
+
+
+	//---------------------------------------------------------
+	// Explosion de defaite
+	//---------------------------------------------------------
+
+	//true tant que le souffle n'est pas retombe
+	static isBlasting = function(){
+		return explosionTimer > 0
+	}
+
+	//alpha du flash plein ecran : dessine par obj_game, par dessus toute la scene
+	static blastFlash = function(){
+		if explosionTimer <= 0 || explosionAge > BLAST_FLASH return 0;
+		return 1 - explosionAge/BLAST_FLASH
+	}
+
+	//confie une tuile a la photo, avec le retard qu'il faut a l'onde pour l'atteindre
+	static launchTile = function(_tile, _link, _i, _j, _piece, _cx, _cy){
+		if photo == noone exit;
+
+		var _x = boardX + _j*TILE_SIZE
+		var _y = boardY + _i*TILE_SIZE
+		var _d = point_distance(_x + TILE_SIZE/2, _y + TILE_SIZE/2, _cx, _cy)
+
+		photo.flyTile(_tile, _link, _x, _y, TILE_SIZE, _piece, BLAST_FLASH + (_d/TILE_SIZE)*TILE_FLY_WAVE)
+	}
+
+	//souffle le plateau : flash, anneaux, debris, et toutes les tuiles aspirees
+	//par la photo. le plateau est vide sur le champ, le reste n'est qu'affichage
+	static explode = function(){
+		if explosionTimer > 0 exit;
+
+		explosionTimer = BLAST_DURATION
+		explosionAge = 0
+		rings = []
+		sparks = []
+
+		var _cx = boardX + (MAP_LENGTH*TILE_SIZE)/2
+		var _cy = boardY + (MAP_HEIGHT*TILE_SIZE)/2
+
+		//les anneaux partent en rafale, chacun plus large et plus lent que le precedent
+		for(var k = 0; k < BLAST_RINGS; k++){
+			array_push(rings, { x: _cx, y: _cy, delay: k*6, age: 0, life: 34 + k*4, max: 90 + k*70 })
+		}
+
+		//debris : projetes du centre, freines par l'air et rattrapes par la gravite
+		for(var k = 0; k < BLAST_SPARKS; k++){
+			var _dir = random(360)
+			var _spd = random_range(4, 16)
+			array_push(sparks, {
+				x: _cx + lengthdir_x(random(40), _dir),
+				y: _cy + lengthdir_y(random(40), _dir),
+				vx: lengthdir_x(_spd, _dir),
+				vy: lengthdir_y(_spd, _dir),
+				size: random_range(2, 7),
+				life: irandom_range(25, BLAST_DURATION),
+				age: 0,
+				color: choose(c_white, c_yellow, c_orange, c_red, BUTTON_TEXT_HL_COLOR)
+			})
+		}
+
+		//tout ce qui trainait sur le plateau part vers la photo, du centre vers les bords.
+		//seul un virus porte encore un morceau : virusPiece garde la trace des virus
+		//deja casses, donc une pilule posee sur leur case ne doit rien liberer
+		for(var i = 0; i < MAP_HEIGHT; i++){
+			for(var j = 0; j < MAP_LENGTH; j++){
+				var _tile = board[i][j]
+				if _tile == EMPTY_TILE continue;
+
+				var _piece = (_tile > YELLOW_PILL) ? pieceFor(i, j) : -1
+				launchTile(_tile, links[i][j], i, j, _piece, _cx, _cy)
+			}
+		}
+
+		//la pilule encore en main part avec le reste
+		if playingPillA != noone launchTile(playingPillA.color, LINK_NONE, playingPillA.i, playingPillA.j, -1, _cx, _cy)
+		if playingPillB != noone launchTile(playingPillB.color, LINK_NONE, playingPillB.i, playingPillB.j, -1, _cx, _cy)
+
+		//le plateau est vide : les tuiles n'existent plus que dans le vol
+		board = clearBoard()
+		links = clearLinks()
+		virusPiece = clearVirusPiece()
+		marks = noone
+		playingPillA = noone
+		playingPillB = noone
+
+		screenShake(BLAST_SHAKE, BLAST_SHAKE_LEN)
+	}
+
+	//avance l'effet, meme une fois la partie dans un etat terminal
+	static stepExplosion = function(){
+		explosionTimer -= 1
+		explosionAge += 1
+
+		for(var k = 0; k < array_length(rings); k++){
+			if rings[k].delay > 0 {
+				rings[k].delay -= 1
+				continue;
+			}
+			rings[k].age += 1
+		}
+
+		for(var k = array_length(sparks)-1; k >= 0; k--){
+			var _s = sparks[k]
+			_s.age += 1
+			_s.x += _s.vx
+			_s.y += _s.vy
+			_s.vy += BLAST_SPARK_GRAVITY
+			_s.vx *= 0.96
+			if _s.age >= _s.life array_delete(sparks, k, 1)
+		}
+	}
+
+	static drawExplosion = function(){
+		if explosionTimer <= 0 exit;
+
+		var _right = boardX + MAP_LENGTH*TILE_SIZE
+		var _bottom = boardY + MAP_HEIGHT*TILE_SIZE
+		var _cx = (boardX + _right)/2
+		var _cy = (boardY + _bottom)/2
+
+		//le plateau reste noirci, et s'eclaircit a mesure que le souffle retombe
+		draw_set_alpha(0.75 * (explosionTimer/BLAST_DURATION))
+		draw_set_color(c_black)
+		draw_rectangle(boardX, boardY, _right, _bottom, false)
+
+		//anneaux de choc : tres rapides au depart, ils s'effacent en s'elargissant
+		for(var k = 0; k < array_length(rings); k++){
+			var _r = rings[k]
+			if _r.delay > 0 || _r.age > _r.life continue;
+
+			var _t = _r.age/_r.life
+			var _rad = _r.max * (1 - power(1 - _t, 3))
+			var _col = (k % 2 == 0) ? c_white : c_orange
+
+			draw_set_alpha((1 - _t)*0.9)
+			for(var w = 0; w < 4; w++){
+				draw_circle_colour(_r.x, _r.y, _rad + w, _col, _col, true)
+			}
+		}
+
+		//le noyau : une boule qui gonfle et s'eteint en une poignee de frames
+		if explosionAge <= BLAST_FLASH*2 {
+			var _t = explosionAge/(BLAST_FLASH*2)
+			draw_set_alpha(1 - _t)
+			draw_circle_colour(_cx, _cy, 40 + 220*_t, c_white, c_yellow, false)
+		}
+
+		//debris
+		for(var k = 0; k < array_length(sparks); k++){
+			var _s = sparks[k]
+			draw_set_alpha(1 - _s.age/_s.life)
+			draw_set_color(_s.color)
+			draw_rectangle(_s.x - _s.size, _s.y - _s.size, _s.x + _s.size, _s.y + _s.size, false)
+		}
+
+		draw_set_alpha(1)
+		draw_set_color(c_white)
 	}
 
 	//cherche des suites : clignotement si on en trouve, sinon pilule suivante
@@ -829,6 +1131,9 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 	//---------------------------------------------------------
 
 	static step = function(){
+		//le souffle vit sa vie, meme une fois la partie perdue
+		if explosionTimer > 0 stepExplosion()
+
 		var press_left = keyboard_check_pressed(controls.left)
 		var press_right = keyboard_check_pressed(controls.right)
 		var press_rotate = keyboard_check_pressed(controls.rotate)
@@ -952,6 +1257,9 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 			drawTile(playingPillB.color, _linkB, boardX + playingPillB.j*TILE_SIZE, boardY + playingPillB.i*TILE_SIZE)
 		}
 
+		//le souffle passe par dessus le plateau, qu'il a deja vide
+		drawExplosion()
+
 		//ecran de preparation, par dessus le plateau deja genere
 		if state == STATE_READY{
 			draw_set_halign(fa_center)
@@ -980,15 +1288,26 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 			draw_set_color(c_white)
 		}
 
-		//message de fin, au dessus du plateau
-		if state == STATE_WIN || state == STATE_LOSE{
-			var _text = (state == STATE_WIN) ? "VICTOIRE" : "DEFAITE"
+		//bandeau du haut : le compte de virus pendant la partie, le verdict a la fin.
+		//le perdant attend que la fumee retombe avant d'afficher quoi que ce soit
+		var _over = (state == STATE_WIN || state == STATE_LOSE)
+		if state != STATE_READY && (!_over || explosionTimer <= 0) {
+			var _text, _color;
+			if _over {
+				_text = (state == STATE_WIN) ? "VICTOIRE" : "DEFAITE"
+				_color = (state == STATE_WIN) ? c_white : c_red
+			} else {
+				_text = "VIRUS : " + string(countViruses()) + "/" + string(NB_INITIAL_VIRUS)
+				_color = c_white
+			}
+
 			draw_set_halign(fa_center)
 			draw_set_valign(fa_bottom)
-			draw_set_color(c_white)
+			draw_set_color(_color)
 			draw_text_transformed(boardX + (MAP_LENGTH*TILE_SIZE)/2, boardY - 8, _text, 2, 2, 0)
 			draw_set_halign(fa_left)
 			draw_set_valign(fa_top)
+			draw_set_color(c_white)
 		}
 	}
 
