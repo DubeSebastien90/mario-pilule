@@ -19,6 +19,15 @@ secretCodes = [
 
 //photo a reconstituer, a droite des plateaux
 photo = noone
+
+//emplacement reserve a la photo, retenu pour pouvoir la redecouper
+photoSlotX = 0
+photoSlotY = 0
+photoSlotW = 0
+photoSlotH = 0
+
+//niveau EXTREME : en duo seulement, les deux plateaux y passent ensemble
+extremeOn = false
 PHOTO_ZOOM = 1.3			//taille de la photo par rapport a un plateau
 
 BUTTON_W = 280
@@ -57,6 +66,12 @@ for(var b = 0; b < array_length(buttons); b++){
 //cree le panneau photo, mis a l'echelle pour tenir dans l'emplacement
 //sans qu'aucun cote ne depasse, et centre dedans
 function setupPhoto(_slotX, _slotY, _slotW, _slotH, _cols, _rows){
+	//retenu tel quel : un changement de decoupe repart du meme emplacement
+	photoSlotX = _slotX
+	photoSlotY = _slotY
+	photoSlotW = _slotW
+	photoSlotH = _slotH
+
 	var _sw = sprite_get_width(spr_photo2)
 	var _sh = sprite_get_height(spr_photo2)
 
@@ -66,6 +81,59 @@ function setupPhoto(_slotX, _slotY, _slotW, _slotH, _cols, _rows){
 	var _h = _sh * _scale
 
 	photo = new PhotoBoard(_slotX + (_slotW - _w)/2, _slotY + (_slotH - _h)/2, _w, _h, _cols, _rows)
+}
+
+//distribue les morceaux de la photo : _count par partie, tires au hasard et
+//sans recoupement, dans l'ordre des virus de chaque plateau
+function sharePhotoPieces(_count){
+	var _ids = photo.shuffledIds()
+
+	for(var g = 0; g < array_length(games); g++){
+		var _mine = []
+		for(var n = 0; n < _count; n++){
+			array_push(_mine, _ids[g*_count + n])
+		}
+		games[g].photo = photo
+		games[g].pieceIds = _mine
+	}
+}
+
+//bascule les deux plateaux en EXTREME, ou les ramene a la normale. la photo
+//change de decoupe, donc tout est redistribue : a faire avant le depart
+function applyExtreme(_on){
+	if extremeOn == _on exit;
+	extremeOn = _on
+
+	var _count = _on ? EXTREME_VIRUS : NB_INITIAL_VIRUS
+	var _rows = _on ? EXTREME_VIRUS_ROWS : VIRUS_ROWS
+
+	//54 morceaux a deux en EXTREME, 24 sinon
+	if _on {
+		setupPhoto(photoSlotX, photoSlotY, photoSlotW, photoSlotH, EXTREME_PHOTO_COLS, EXTREME_PHOTO_ROWS)
+	} else {
+		setupPhoto(photoSlotX, photoSlotY, photoSlotW, photoSlotH, 4, 6)
+	}
+
+	//les deux joueurs partagent le meme niveau : les plateaux doivent etre jumeaux
+	for(var g = 0; g < array_length(games); g++){
+		games[g].difficulty = _on ? EXTREME_DIFFICULTY : MAX_DIFFICULTY
+		games[g].rebuildBoard(_count, _rows)
+		games[g].ready = false			//le plateau approuve n'est plus le meme
+	}
+
+	sharePhotoPieces(_count)
+}
+
+//suit le choix des joueurs sur l'ecran de preparation : EXTREME est un mode,
+//pas un reglage personnel, donc il suffit que l'un des deux le demande
+function syncExtreme(){
+	if array_length(games) < 2 exit;
+
+	var _wanted = false
+	for(var g = 0; g < array_length(games); g++){
+		if games[g].isExtreme() _wanted = true
+	}
+	applyExtreme(_wanted)
 }
 
 //cree les parties du mode choisi et quitte le menu
@@ -90,14 +158,15 @@ function startGame(_mode){
 		secretCodes[c].step = 0
 	}
 
+	extremeOn = false
+
 	if _mode == MODE_SOLO {
 		//deux colonnes : plateau puis photo, 12 morceaux pour 12 virus
 		var _x0 = (room_width - (_boardW + _gap + _photoW)) / 2
 		games = [ new DrMarioGame(_x0, _y0, _arrows) ]
 
 		setupPhoto(_x0 + _boardW + _gap, _photoY, _photoW, _photoH, 2, 6)
-		games[0].photo = photo
-		games[0].pieceIds = photo.shuffledIds()
+		sharePhotoPieces(NB_INITIAL_VIRUS)
 
 		//le seul joueur est aux fleches : le code WASD ne vise personne
 		gameArrows = games[0]
@@ -122,19 +191,11 @@ function startGame(_mode){
 
 		//une seule photo pour les deux : 24 morceaux, 12 chacun, tires au hasard
 		setupPhoto(_x0 + (_boardW + _gap)*2, _photoY, _photoW, _photoH, 4, 6)
-		games[0].photo = photo
-		games[1].photo = photo
+		sharePhotoPieces(NB_INITIAL_VIRUS)
 
-		//la liste melangee est coupee en deux : les deux moities sont donc disjointes
-		var _ids = photo.shuffledIds()
-		var _idsA = []
-		var _idsB = []
-		for(var n = 0; n < NB_INITIAL_VIRUS; n++){
-			array_push(_idsA, _ids[n])
-			array_push(_idsB, _ids[NB_INITIAL_VIRUS + n])
-		}
-		games[0].pieceIds = _idsA
-		games[1].pieceIds = _idsB
+		//le 11e niveau n'est ouvert qu'ici : il lui faut deux plateaux
+		games[0].maxDifficulty = EXTREME_DIFFICULTY
+		games[1].maxDifficulty = EXTREME_DIFFICULTY
 	}
 
 	//le bouton de retour se centre sur le dernier plateau cree :

@@ -52,5 +52,9 @@ for(var g = 0; g < array_length(games); g++){
 	games[g].step()
 }
 
+//le choix d'EXTREME retaille les deux plateaux et la photo : seulement tant que
+//personne n'est parti, une partie en cours ne doit jamais etre retiree
+if gamesWaiting() syncExtreme()
+
 //le depart est commun : tout le monde attend le dernier
 startWhenAllReady()

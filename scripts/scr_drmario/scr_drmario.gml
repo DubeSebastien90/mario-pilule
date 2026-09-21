@@ -19,6 +19,7 @@
 #macro MAP_HEIGHT 16
 #macro MAP_LENGTH 8
 #macro NB_INITIAL_VIRUS 12		//autant que de morceaux de photo a debloquer
+#macro VIRUS_ROWS 6				//rangees du bas ou les virus peuvent apparaitre
 #macro MAX_SETUP_TRIES 100		//essais avant d'accepter un plateau de depart imparfait
 
 //vol d'un morceau de photo, du virus casse vers sa place sur le panneau
@@ -88,6 +89,13 @@
 //difficulte : chaque niveau retire 2 frames au tick de la pilule
 #macro MIN_DIFFICULTY 1
 #macro MAX_DIFFICULTY 10
+
+//EXTREME : un 11e niveau reserve au duo. plateaux charges, photo en 54 morceaux
+#macro EXTREME_DIFFICULTY 11
+#macro EXTREME_VIRUS 27			//par plateau, soit les 54 morceaux a deux
+#macro EXTREME_VIRUS_ROWS 10
+#macro EXTREME_PHOTO_COLS 6
+#macro EXTREME_PHOTO_ROWS 9
 #macro BASE_DIFFICULTY 3		//celle qui correspond a TICK_COOLDOWN tel quel
 #macro DIFFICULTY_STEP 2
 
@@ -429,6 +437,9 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 	stateTimer = 0
 
 	difficulty = BASE_DIFFICULTY
+	maxDifficulty = MAX_DIFFICULTY	//le duo ouvre le niveau EXTREME en plus
+	virusCount = NB_INITIAL_VIRUS	//virus de depart, donc morceaux de photo a gagner
+	virusRows = VIRUS_ROWS			//hauteur de la zone ou ils sont semes
 	ready = false
 	tickMax = TICK_COOLDOWN			//recalcule au depart, selon la difficulte
 	tickCooldown = TICK_COOLDOWN
@@ -565,11 +576,11 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 			virusPiece = clearVirusPiece()
 			_board = clearBoard()
 
-			for (var n = 0; n < NB_INITIAL_VIRUS; n++){
-				var _i = MAP_HEIGHT - irandom(5) - 1
+			for (var n = 0; n < virusCount; n++){
+				var _i = MAP_HEIGHT - irandom(virusRows-1) - 1
 				var _j = irandom(MAP_LENGTH-1)
 				while _board[_i][_j] != EMPTY_TILE{
-					_i = MAP_HEIGHT - irandom(5) - 1
+					_i = MAP_HEIGHT - irandom(virusRows-1) - 1
 					_j = irandom(MAP_LENGTH-1)
 				}
 				_board[_i][_j] = BLUE_VIRUS + n%3
@@ -645,7 +656,21 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 	}
 
 	static changeDifficulty = function(_delta){
-		difficulty = clamp(difficulty + _delta, MIN_DIFFICULTY, MAX_DIFFICULTY)
+		difficulty = clamp(difficulty + _delta, MIN_DIFFICULTY, maxDifficulty)
+	}
+
+	//true si ce plateau est regle sur le niveau EXTREME
+	static isExtreme = function(){
+		return difficulty >= EXTREME_DIFFICULTY
+	}
+
+	//retire le plateau avec une autre charge de virus : c'est ce que fait le
+	//passage en EXTREME, avant le depart. virusPiece est refait au passage
+	static rebuildBoard = function(_count, _rows){
+		virusCount = _count
+		virusRows = _rows
+		board = setupBoard()
+		links = clearLinks()
 	}
 
 	//quitte l'ecran de preparation : la vitesse est figee, la premiere pilule tombe
@@ -1576,7 +1601,15 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 
 			draw_set_color(c_white)
 			draw_text_transformed(_cx, _cy - 56, "DIFFICULTE", 1, 1, 0)
-			draw_text_transformed(_cx, _cy - 16, string(difficulty), 4, 4, 0)
+
+			//le 11e niveau porte un nom, trop long pour la taille des chiffres
+			if isExtreme() {
+				draw_set_color(c_red)
+				draw_text_transformed(_cx, _cy - 16, "EXTREME", 3, 3, 0)
+				draw_set_color(c_white)
+			} else {
+				draw_text_transformed(_cx, _cy - 16, string(difficulty), 4, 4, 0)
+			}
 			draw_set_color(c_gray)
 			draw_text(_cx, _cy + 28, "gauche / droite")
 
@@ -1597,7 +1630,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 				_text = (state == STATE_WIN) ? "VICTOIRE" : "DEFAITE"
 				_color = (state == STATE_WIN) ? c_white : c_red
 			} else {
-				_text = "VIRUS : " + string(countViruses()) + "/" + string(NB_INITIAL_VIRUS)
+				_text = "VIRUS : " + string(countViruses()) + "/" + string(virusCount)
 				_color = c_white
 			}
 
