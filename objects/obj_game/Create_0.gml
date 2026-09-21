@@ -8,6 +8,15 @@ temps = 0
 menuActive = true
 games = []
 
+//codes secrets : trois fois 67 melange le plateau aux fleches, trois fois 69
+//celui au WASD. les deux parties visees sont retenues au lancement de la partie
+gameArrows = noone
+gameWasd = noone
+secretCodes = [
+	{ keys: [6,7,6,7,6,7], who: "arrows", step: 0 },
+	{ keys: [6,9,6,9,6,9], who: "wasd",   step: 0 },
+]
+
 //photo a reconstituer, a droite des plateaux
 photo = noone
 PHOTO_ZOOM = 1.3			//taille de la photo par rapport a un plateau
@@ -76,6 +85,11 @@ function startGame(_mode){
 
 	photo = noone
 
+	//aucun code n'est en cours au depart
+	for(var c = 0; c < array_length(secretCodes); c++){
+		secretCodes[c].step = 0
+	}
+
 	if _mode == MODE_SOLO {
 		//deux colonnes : plateau puis photo, 12 morceaux pour 12 virus
 		var _x0 = (room_width - (_boardW + _gap + _photoW)) / 2
@@ -84,6 +98,10 @@ function startGame(_mode){
 		setupPhoto(_x0 + _boardW + _gap, _photoY, _photoW, _photoH, 2, 6)
 		games[0].photo = photo
 		games[0].pieceIds = photo.shuffledIds()
+
+		//le seul joueur est aux fleches : le code WASD ne vise personne
+		gameArrows = games[0]
+		gameWasd = noone
 	} else {
 		//trois colonnes : deux plateaux, puis la photo plus large
 		var _x0 = (room_width - (_boardW*2 + _gap*2 + _photoW)) / 2
@@ -95,6 +113,9 @@ function startGame(_mode){
 		//chaque partie connait l'autre : la fin de l'une termine l'autre
 		games[0].opponent = games[1]
 		games[1].opponent = games[0]
+
+		gameWasd = games[0]
+		gameArrows = games[1]
 
 		//mode test : le plateau WASD ne descend jamais, il ne peut donc pas perdre
 		if _mode == MODE_DUO_TEST games[0].autoFall = false
@@ -127,6 +148,38 @@ function startGame(_mode){
 	QUIT_Y = photo.py - QUIT_GAP - QUIT_H
 
 	menuActive = false
+}
+
+//le chiffre tape cette frame, -1 si aucun. pave numerique compris
+function digitPressed(){
+	for(var d = 0; d <= 9; d++){
+		if keyboard_check_pressed(ord(string(d))) return d;
+		if keyboard_check_pressed(vk_numpad0 + d) return d;
+	}
+	return -1
+}
+
+//suit les codes secrets chiffre par chiffre, et melange le plateau vise
+//quand l'un d'eux est tape en entier. un chiffre faux remet le code a zero,
+//sauf s'il est lui-meme un debut de code
+function checkSecretCodes(){
+	var _digit = digitPressed()
+	if _digit < 0 exit;
+
+	for(var c = 0; c < array_length(secretCodes); c++){
+		var _code = secretCodes[c]
+
+		if _digit == _code.keys[_code.step] {
+			_code.step += 1
+			if _code.step < array_length(_code.keys) continue;
+
+			_code.step = 0
+			var _target = (_code.who == "wasd") ? gameWasd : gameArrows
+			if _target != noone _target.shuffleBoard()
+		} else {
+			_code.step = (_digit == _code.keys[0]) ? 1 : 0
+		}
+	}
 }
 
 //true si la souris est dans ce rectangle
@@ -173,5 +226,7 @@ function gamesFinished(){
 //abandonne les parties et revient au menu
 function backToMenu(){
 	games = []
+	gameArrows = noone
+	gameWasd = noone
 	menuActive = true
 }

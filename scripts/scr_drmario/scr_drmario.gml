@@ -36,6 +36,20 @@
 #macro BLAST_SPARKS 120			//debris projetes du centre
 #macro BLAST_SPARK_GRAVITY 0.35
 
+//file d'attente des pilules, a droite du plateau
+#macro PREVIEW_COUNT 3			//pilules montrees d'avance
+#macro PREVIEW_SCALE 0.7		//taille d'une moitie, par rapport a une case
+#macro PREVIEW_GAP 10			//espace entre le bord du plateau et la file
+#macro PREVIEW_TOP 16			//hauteur de la premiere place, sous le haut du plateau
+#macro PREVIEW_STEP 40			//ecart vertical entre deux places
+#macro PREVIEW_ANIM 14			//frames de la montee, quand une pilule part
+
+//melange secret : chaque tuile rejoint une autre case du meme plateau
+#macro SHUFFLE_FLY_DURATION 40
+#macro SHUFFLE_FLY_ARC 0.45		//arc plus haut : les trajets sont courts
+#macro SHUFFLE_FLY_SPIN 200
+#macro SHUFFLE_STAGGER 14		//retard maximal au depart, pour que ca parte en desordre
+
 //vol d'une tuile soufflee, du plateau vers la photo qui l'avale
 #macro TILE_FLY_DURATION 50
 #macro TILE_FLY_ARC 0.35
@@ -424,12 +438,22 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 	playingPillA = noone
 	playingPillB = noone
 
+	//file des pilules a venir, la premiere est celle qui entrera en jeu
+	nextPills = []
+	pendingPill = noone				//sortie de la file, en route vers le plateau
+	previewTimer = 0				//frames restantes de la montee de la file
+	previewMax = PREVIEW_ANIM		//duree de la montee en cours, calee sur l'attente
+	previewFly = noone				//la pilule qui rejoint le plateau, noone sinon
+
 	opponent = noone				//l'autre partie, pour se terminer ensemble
 	autoFall = true					//false : la pilule ne descend jamais toute seule
 
 	photo = noone					//panneau partage, noone si aucun
 	pieceIds = noone				//morceaux attribues a cette partie, dans l'ordre des virus
 	virusPiece = noone				//n-ieme virus occupant chaque case
+
+	shuffling = []					//tuiles en train de rejoindre leur nouvelle case
+	shuffleTimer = 0				//frames restantes du melange, 0 = plateau normal
 
 	//explosion de defaite, purement visuelle : la partie est deja finie
 	explosionTimer = 0				//frames restantes, 0 = pas d'explosion en cours
@@ -467,13 +491,17 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		return _links
 	}
 
-	//morceau de photo cache par la case, -1 si elle ne porte pas de virus
-	static pieceFor = function(_i, _j){
-		var _n = virusPiece[_i][_j]
+	//morceau de photo attribue au _n-ieme virus du plateau, -1 s'il n'y en a pas
+	static pieceForVirus = function(_n){
 		if _n < 0 return -1;
 		if pieceIds == noone return _n;
 		if _n >= array_length(pieceIds) return -1;
 		return pieceIds[_n]
+	}
+
+	//morceau de photo cache par la case, -1 si elle ne porte pas de virus
+	static pieceFor = function(_i, _j){
+		return pieceForVirus(virusPiece[_i][_j])
 	}
 
 	//aucun morceau attribue tant qu'un virus n'occupe pas la case
@@ -556,7 +584,7 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		return _board
 	}
 
-	//nombre de virus encore sur le plateau
+	//nombre de virus encore en jeu, cases et melange en cours confondus
 	static countViruses = function(){
 		var _n = 0
 		for(var i = 0; i < MAP_HEIGHT; i++){
@@ -564,6 +592,12 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 				if board[i][j] > YELLOW_PILL _n += 1
 			}
 		}
+
+		//pendant un melange une tuile n'est sur aucune case : elle compte quand meme
+		for(var k = 0; k < array_length(shuffling); k++){
+			if shuffling[k].tile > YELLOW_PILL _n += 1
+		}
+
 		return _n
 	}
 
@@ -619,7 +653,43 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		if state != STATE_READY exit;
 
 		tickMax = tickForDifficulty()
-		spawnPill()
+
+		//la premiere pilule entre comme toutes les autres : le temps de l'animation
+		state = STATE_SPAWN
+		stateTimer = PREVIEW_ANIM + 1
+	}
+
+	//une pilule au hasard, pas encore posee sur le plateau
+	static rollPill = function(){
+		return {
+			a: choose(BLUE_PILL, RED_PILL, YELLOW_PILL),
+			b: choose(BLUE_PILL, RED_PILL, YELLOW_PILL)
+		}
+	}
+
+	//remplit la file : le joueur voit les prochaines des l'ecran de preparation
+	static fillPreview = function(){
+		nextPills = []
+		for(var k = 0; k < PREVIEW_COUNT; k++){
+			array_push(nextPills, rollPill())
+		}
+	}
+
+	//sort la tete de file, que la file remplace aussitot par le bas
+	static takeNextPill = function(){
+		var _p = nextPills[0]
+		array_delete(nextPills, 0, 1)
+		array_push(nextPills, rollPill())
+		return _p
+	}
+
+	//lance l'entree de la prochaine pilule. _frames est ce qui reste avant qu'elle
+	//apparaisse : le vol finit donc pile au moment ou le joueur prend la main
+	static startPreviewFly = function(_frames){
+		pendingPill = takeNextPill()
+		previewFly = pendingPill
+		previewMax = max(1, _frames)
+		previewTimer = previewMax
 	}
 
 	static spawnPill = function(){
@@ -629,8 +699,16 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 			exit;
 		}
 
-		playingPillA = new Pill(0,(MAP_LENGTH/2)-1,choose(1,2,3))
-		playingPillB = new Pill(0,MAP_LENGTH/2,choose(1,2,3))
+		//celle qui volait se pose ici meme : le vol vient de finir, le raccord est net.
+		//sans vol en cours (cas de repli), on depile a la volee
+		var _next = (pendingPill != noone) ? pendingPill : takeNextPill()
+		pendingPill = noone
+		previewFly = noone
+		previewTimer = 0
+
+		playingPillA = new Pill(0,(MAP_LENGTH/2)-1,_next.a)
+		playingPillB = new Pill(0,MAP_LENGTH/2,_next.b)
+
 		tickCooldown = tickMax
 		state = STATE_CONTROL
 	}
@@ -919,6 +997,62 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		return _placed > 0
 	}
 
+	//---------------------------------------------------------
+	// File des pilules a venir
+	//---------------------------------------------------------
+
+	//coin gauche de la file, juste a droite du plateau
+	static previewX = function(){
+		return boardX + MAP_LENGTH*TILE_SIZE + PREVIEW_GAP
+	}
+
+	//centre vertical de la place _slot, qui peut etre fractionnaire pendant la montee
+	static previewY = function(_slot){
+		return boardY + PREVIEW_TOP + _slot*PREVIEW_STEP
+	}
+
+	//une pilule couchee, centree en (_cx,_cy), a l'echelle demandee
+	static drawPillAt = function(_a, _b, _cx, _cy, _scale, _alpha){
+		var _half = TILE_SIZE*_scale/2
+		drawTileExt(_a, LINK_RIGHT, _cx - _half, _cy, _scale, 0, _alpha)
+		drawTileExt(_b, LINK_LEFT,  _cx + _half, _cy, _scale, 0, _alpha)
+	}
+
+	static drawPreview = function(){
+		if state == STATE_WIN || state == STATE_LOSE exit;
+
+		//0 au depart de la montee, 1 une fois la file en place
+		var _t = 1
+		if previewTimer > 0 {
+			_t = 1 - previewTimer/previewMax
+			_t = _t*_t*(3 - 2*_t)
+		}
+
+		var _cx = previewX() + TILE_SIZE*PREVIEW_SCALE
+
+		for(var k = 0; k < array_length(nextPills); k++){
+			//pendant la montee chaque pilule vient de la place d'en dessous
+			var _slot = (previewTimer > 0) ? lerp(k + 1, k, _t) : k
+
+			//la derniere n'existait pas encore : elle se fond dans la file
+			var _alpha = (previewTimer > 0 && k == array_length(nextPills)-1) ? _t : 1
+
+			drawPillAt(nextPills[k].a, nextPills[k].b, _cx, previewY(_slot), PREVIEW_SCALE, _alpha)
+		}
+
+		//la partante quitte la file et grandit jusqu'a sa case d'apparition, connue
+		//d'avance : elle finit a l'echelle 1 la ou la vraie pilule prend le relais
+		if previewTimer > 0 && previewFly != noone {
+			var _toX = boardX + (MAP_LENGTH/2)*TILE_SIZE
+			var _toY = boardY + TILE_SIZE/2
+
+			drawPillAt(previewFly.a, previewFly.b,
+				lerp(_cx, _toX, _t), lerp(previewY(0), _toY, _t),
+				lerp(PREVIEW_SCALE, 1, _t), 1)
+		}
+	}
+
+
 	//en duo c'est un duel : celui qui nettoie son plateau le premier fait sauter
 	//celui de l'autre. une pile qui creve reste une defaite ordinaire, sans souffle,
 	//et elle coule l'equipe : la photo ne sera de toute facon jamais complete.
@@ -933,6 +1067,145 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		} else if opponent != noone {
 			//la victoire de l'un est la defaite de l'autre, et celle-la explose
 			opponent.setEnding(STATE_LOSE, true)
+		}
+	}
+
+
+	//---------------------------------------------------------
+	// Melange secret
+	//---------------------------------------------------------
+
+	//true tant que les tuiles n'ont pas retrouve une case
+	static isShuffling = function(){
+		return shuffleTimer > 0
+	}
+
+	//redistribue tout le contenu du plateau sur les memes cases, au hasard.
+	//la silhouette du plateau ne change pas : rien ne se met a flotter, rien ne
+	//tombe, seules les couleurs et les virus changent de place
+	static shuffleBoard = function(){
+		if shuffleTimer > 0 exit;							//un melange a la fois
+		if state == STATE_READY || state == STATE_WIN || state == STATE_LOSE exit;
+
+		//contenu de chaque case occupee, avec sa provenance
+		var _items = []
+		for(var i = 0; i < MAP_HEIGHT; i++){
+			for(var j = 0; j < MAP_LENGTH; j++){
+				if board[i][j] == EMPTY_TILE continue;
+				array_push(_items, { tile: board[i][j], virus: virusPiece[i][j], i: i, j: j })
+			}
+		}
+
+		var _n = array_length(_items)
+		if _n < 2 exit;
+
+		//les cases d'arrivee sont les memes, dans un ordre melange
+		var _slots = []
+		for(var k = 0; k < _n; k++){
+			array_push(_slots, { i: _items[k].i, j: _items[k].j })
+		}
+		for(var k = _n-1; k > 0; k--){
+			var _r = irandom(k)
+			var _tmp = _slots[k]
+			_slots[k] = _slots[_r]
+			_slots[_r] = _tmp
+		}
+
+		//le plateau se vide : tout n'existe plus que dans le vol
+		board = clearBoard()
+		links = clearLinks()
+		virusPiece = clearVirusPiece()
+		marks = noone
+
+		var _longest = 0
+		for(var k = 0; k < _n; k++){
+			var _it = _items[k]
+			var _to = _slots[k]
+			var _delay = random(SHUFFLE_STAGGER)
+
+			var _fromX = boardX + _it.j*TILE_SIZE + TILE_SIZE/2
+			var _fromY = boardY + _it.i*TILE_SIZE + TILE_SIZE/2
+			var _toX = boardX + _to.j*TILE_SIZE + TILE_SIZE/2
+			var _toY = boardY + _to.i*TILE_SIZE + TILE_SIZE/2
+			var _dist = point_distance(_fromX, _fromY, _toX, _toY)
+
+			array_push(shuffling, {
+				tile: _it.tile,	virus: _it.virus,
+				ti: _to.i,		tj: _to.j,
+				fromX: _fromX,	fromY: _fromY,
+				toX: _toX,		toY: _toY,
+				//les deux cases peuvent etre sur la meme ligne : l'arc passe sur le cote
+				ctrlX: (_fromX + _toX)/2 + random_range(-_dist*0.25, _dist*0.25),
+				ctrlY: (_fromY + _toY)/2 - max(_dist*SHUFFLE_FLY_ARC, TILE_SIZE*1.5),
+				spin: random_range(-SHUFFLE_FLY_SPIN, SHUFFLE_FLY_SPIN),
+				delay: _delay,
+				timer: SHUFFLE_FLY_DURATION
+			})
+
+			_longest = max(_longest, _delay + SHUFFLE_FLY_DURATION)
+		}
+
+		shuffleTimer = _longest
+	}
+
+	//avance le melange : chaque tuile arrivee reprend sa place sur le plateau
+	static stepShuffle = function(){
+		shuffleTimer -= 1
+
+		for(var k = array_length(shuffling)-1; k >= 0; k--){
+			var _f = shuffling[k]
+			if _f.delay > 0 {
+				_f.delay -= 1
+				continue;
+			}
+
+			_f.timer -= 1
+			if _f.timer > 0 continue;
+
+			//la tuile se repose : toujours seule, une paire ne survit pas au melange
+			board[_f.ti][_f.tj] = _f.tile
+			links[_f.ti][_f.tj] = LINK_NONE
+			virusPiece[_f.ti][_f.tj] = _f.virus
+			array_delete(shuffling, k, 1)
+		}
+
+		//securite : le compte des frames ne doit jamais finir avant les tuiles
+		if shuffleTimer <= 0 && array_length(shuffling) > 0 shuffleTimer = 1
+	}
+
+	static drawShuffle = function(){
+		for(var k = 0; k < array_length(shuffling); k++){
+			var _f = shuffling[k]
+
+			//pas encore partie : elle attend sur sa case, en tremblant un peu
+			if _f.delay > 0 {
+				var _jx = random_range(-1, 1)
+				var _jy = random_range(-1, 1)
+				drawTileExt(_f.tile, LINK_NONE, _f.fromX + _jx, _f.fromY + _jy, 1, 0, 1)
+				if _f.tile > YELLOW_PILL && photo != noone {
+					photo.drawPiece(pieceForVirus(_f.virus), _f.fromX + _jx - TILE_SIZE/2,
+						_f.fromY + _jy - TILE_SIZE/2, TILE_SIZE, TILE_SIZE, 0.4)
+				}
+				continue;
+			}
+
+			var _t = 1 - _f.timer/SHUFFLE_FLY_DURATION
+			_t = _t*_t*(3 - 2*_t)						//meme adoucissement que les morceaux
+
+			var _u = 1 - _t
+			var _cx = _u*_u*_f.fromX + 2*_u*_t*_f.ctrlX + _t*_t*_f.toX
+			var _cy = _u*_u*_f.fromY + 2*_u*_t*_f.ctrlY + _t*_t*_f.toY
+
+			//elle grossit a mi-parcours : elle passe visiblement au dessus du plateau
+			var _scale = 1 + 0.35*dsin(180*_t)
+
+			drawTileExt(_f.tile, LINK_NONE, _cx, _cy, _scale, _f.spin*_t, 1)
+
+			//un virus emporte son apercu de morceau avec lui
+			if _f.tile > YELLOW_PILL && photo != noone {
+				var _s = TILE_SIZE*_scale
+				photo.drawPiece(pieceForVirus(_f.virus), _cx - _s/2, _cy - _s/2, _s, _s, 0.4)
+			}
 		}
 	}
 
@@ -1134,6 +1407,19 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 		//le souffle vit sa vie, meme une fois la partie perdue
 		if explosionTimer > 0 stepExplosion()
 
+		//pendant un melange la partie est figee : ni chute, ni commandes
+		if shuffleTimer > 0 {
+			stepShuffle()
+			exit;
+		}
+
+		//la montee de la file avance au meme rythme que l'attente qui l'a lancee,
+		//donc apres le melange : les deux doivent se terminer sur la meme frame
+		if previewTimer > 0 {
+			previewTimer -= 1
+			if previewTimer <= 0 previewFly = noone
+		}
+
 		var press_left = keyboard_check_pressed(controls.left)
 		var press_right = keyboard_check_pressed(controls.right)
 		var press_rotate = keyboard_check_pressed(controls.rotate)
@@ -1212,6 +1498,13 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 			//délai avant la pilule suivante
 			case STATE_SPAWN:
 				stateTimer -= 1
+
+				//le vol part assez tot pour finir exactement a l'apparition : le
+				//joueur recupere une pilule deja posee, et le tick entier pour agir
+				if pendingPill == noone && stateTimer > 0 && stateTimer <= PREVIEW_ANIM {
+					startPreviewFly(stateTimer)
+				}
+
 				if stateTimer <= 0 spawnPill()
 				break
 
@@ -1249,13 +1542,20 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 			}
 		}
 
-		//draw pilule en vol, par-dessus le plateau
+		//la file des prochaines, a droite du plateau
+		drawPreview()
+
+		//draw pilule en vol, par-dessus le plateau. le vol de la file est deja fini
+		//quand elle apparait : les deux ne coexistent jamais
 		if playingPillA != noone && playingPillB != noone{
 			var _linkA = linkBetween(playingPillA.i, playingPillA.j, playingPillB.i, playingPillB.j)
 			var _linkB = linkBetween(playingPillB.i, playingPillB.j, playingPillA.i, playingPillA.j)
 			drawTile(playingPillA.color, _linkA, boardX + playingPillA.j*TILE_SIZE, boardY + playingPillA.i*TILE_SIZE)
 			drawTile(playingPillB.color, _linkB, boardX + playingPillB.j*TILE_SIZE, boardY + playingPillB.i*TILE_SIZE)
 		}
+
+		//les tuiles en plein melange survolent le plateau
+		drawShuffle()
 
 		//le souffle passe par dessus le plateau, qu'il a deja vide
 		drawExplosion()
@@ -1318,4 +1618,5 @@ function DrMarioGame(_boardX, _boardY, _controls) constructor {
 
 	board = setupBoard()			//remplit aussi virusPiece
 	links = clearLinks()
+	fillPreview()					//les prochaines sont connues des l'ecran de preparation
 }
